@@ -1,0 +1,13 @@
+name: binder-env
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - numpy
+  - pip
+  - pip:
+    - nbgitpuller
+    - pandas
+    - matplotlib
+    - networkx
+    - mpl_axes_aligner
