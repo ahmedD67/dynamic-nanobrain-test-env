@@ -52,7 +52,7 @@ class Layer :
 class HiddenLayer(Layer) :
     
     def __init__(self, N, output_channel, inhibition_channel, excitation_channel, 
-                 gammas=np.zeros(6), func_Vgate_to_Isd=None):
+                 gammas=np.zeros(6), func_Vgate_to_Isd=None, V_thres=1.2):
         
         Layer.__init__(self, N, layer_type='hidden')
         # Connections to the outside world
@@ -69,6 +69,7 @@ class HiddenLayer(Layer) :
         self.dV= np.zeros_like(self.V)
         self.I = np.zeros(self.N)
         self.ISD = np.zeros_like(self.I)
+        self.V_thres = V_thres
          
     # System matrix
     def calc_A(self,g11,g22,g13,g23,g33) :
@@ -91,6 +92,9 @@ class HiddenLayer(Layer) :
         
     def update_V(self, dt) :
         self.V += dt*self.dV
+        # Voltage clipping
+        if self.V > self.V_thres :
+            self.V = self.V_thres
     
     def update_I(self, dt) :
         # Get the source drain current from the transistor IV
@@ -227,7 +231,8 @@ def connect_layers(down, up, layers, channels) :
         
         def print_W(self, *args):
             def print_key_W(key,W) :
-                print('{0}:\n{1}'.format(key,W))
+                with np.printoptions(precision=2, suppress=True):
+                    print('{0}:\n{1}'.format(key,W))
             if len(args) > 0:
                 for key in args :        
                     print_key_W(key,self.W[self.channels[key],:,:])

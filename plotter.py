@@ -77,7 +77,7 @@ def retrieve_G(layers, weights) :
     
     return G
     
-def visualize_network(layers, weights, node_size=600, layout='multipartite') :
+def visualize_network(layers, weights, node_size=600, layout='multipartite', show_edge_labels=True, shell_order=None) :
     edges = {}
     for key in weights :
         edges[key] = name_edges(weights[key],layers)
@@ -97,10 +97,14 @@ def visualize_network(layers, weights, node_size=600, layout='multipartite') :
                'O': 0.7}
     
     values = [val_map.get(node[0], 0.45) for node in G.nodes()]
-    edge_labels=dict([((u,v,),d['weight'])
+    edge_labels=dict([((u,v,),f"{d['weight']:.1f}")
                      for u,v,d in G.edges(data=True)])
     edge_colors=[d['color'] for u,v,d in G.edges(data=True)]
     edge_weights=[d['weight'] for u,v,d in G.edges(data=True)]
+    
+    # Try new way of constructing this
+    #edge_labels = dict([((n1, n2), f'{n1}->{n2}')
+    #                for n1, n2 in G.edges])
     
     #red_edges = [('I1','H0')]
     red_edges = []
@@ -109,6 +113,34 @@ def visualize_network(layers, weights, node_size=600, layout='multipartite') :
     
     if layout=='multipartite' :
         pos=nx.multipartite_layout(G)
+    elif layout=='spring' :
+        pos=nx.spring_layout(G)
+    elif layout=='circular' :
+        pos=nx.circular_layout(G)
+    elif layout=='spiral' :
+        pos=nx.spiral_layout(G)
+    elif layout=='kamada_kawai' :
+        pos=nx.kamada_kawai_layout(G)
+    elif layout=='shell' :
+        nlist = []
+        # Combine the output and input layer on the same circle
+        if shell_order is None:
+            # Number of layers
+            P = len(nodes.keys())
+            for key in nodes:
+                if key < P-1 :
+                    nlist.append(nodes[key])
+                else :
+                    nlist[0] += nodes[key]
+            # Reverse list to have input + output as outer layer
+            nlist = nlist[::-1]
+            
+        else :
+            for key in shell_order :
+                nlist.append(nodes[key])
+                
+        pos=nx.shell_layout(G,nlist=nlist)
+        
     else :  
         print('Sorry, layout not implemented, reverting back to multipartite')
         pos=nx.multipartite_layout(G)
@@ -124,7 +156,8 @@ def visualize_network(layers, weights, node_size=600, layout='multipartite') :
                            width=edge_weights)
 
                           # connectionstyle='arc3,rad=0.2')
-    nx.draw_networkx_edge_labels(G,pos,edge_labels=edge_labels)
+    if show_edge_labels :
+        nx.draw_networkx_edge_labels(G,pos,edge_labels=edge_labels)
     
     # There is an interface to graphviz .dot files provided by 
     #nx.drawing.nx_pydot.write_dot(G, 'graph.dot')
