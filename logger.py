@@ -37,7 +37,11 @@ class Logger :
                 # Output currents
                 for node in node_list :
                     names.append(node+'-Iout')
+                # ISD (source drain) done separately to get correct ordering
+                for node in node_list :
                     names.append(node+'-ISD')  
+                for node in node_list :
+                    names.append(node+'-Pout')
              
             elif layers[idx].layer_type == 'output' :
                 # Currents
@@ -49,7 +53,7 @@ class Logger :
                 raise RuntimeError
         return names
         
-    def add_tstep(self,t,layers) :
+    def add_tstep(self,t,layers, unity_coeff=1.0) :
         # Extract the data from each node in layers
         row = [t]
         for idx in layers.keys():
@@ -67,11 +71,18 @@ class Logger :
                 curr=layers[idx].B[:2].flatten(order='F').tolist()
                 row += curr 
                 # Output currents
-                curr=layers[idx].I.flatten(order='F').tolist()
-                row += curr 
+                # Here I add the normalization also to the recorded output
+                curr=layers[idx].I*unity_coeff
+                # Now convert to list
+                curr=curr.flatten(order='F').tolist() 
+                #curr=layers[idx].I.flatten(order='F').tolist() 
+                row += curr
                 curr=layers[idx].ISD.flatten(order='F').tolist()
                 row += curr 
-             
+                pout=layers[idx].P*unity_coeff
+                pout=pout.flatten(order='F').tolist()
+                row +=pout
+                
             elif layers[idx].layer_type == 'output' :
                 # Voltages
                 curr=layers[idx].B.diagonal().flatten(order='F').tolist()

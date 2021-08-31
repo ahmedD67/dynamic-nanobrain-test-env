@@ -178,7 +178,7 @@ def visualize_dynamic_result(res, columns) :
     res.plot(x = 'Time', y = columns,
              xlabel='Time (ns)', ylabel='Voltage/Current (V)')
         
-
+    plt.gca().grid(True)
 
 def subplot_input_output(target, res, channels) :
     # Check if channels key's are colors
@@ -224,37 +224,55 @@ def subplot_node(target, res, node, plot_all=False) :
     columns = [name for name in res.columns if node in name]
 
     if not plot_all :
-        # Choose voltages and Iout, 4 columns
-        columns = columns[0:3] + [columns[5]]
+        # Choose voltages and Iout, Pout, 5 columns
+        columns = columns[0:3] + [columns[5]] + [columns[7]]
 
     # Plot voltages
     res.plot(subplots=False, ax=target, legend=True, sharex=True, sharey=False,
              x = 'Time', y = columns[:3], ylabel='Voltages (V)')
     
+    # Plot currents
     ax2 = res.plot(subplots=False, ax=target, legend=True, sharex=True, sharey=False,
                    secondary_y=True, xlabel='Time (ns)',
                    x = 'Time', y = columns[3:], style = '--')
     
     # The plot wrapper actually spits out a new axis that we can use  
-    ax2.set_ylabel('Currents (A)')
+    ax2.set_ylabel('Currents (nA)')
     
     align.yaxes(target,0,ax2,0,0.5)
     
     target.set_title('Node '+node)
     
 def subplot_attr(target, res, attr) :
-    # Get all the labels for that node
+    """
+    Generates a subplot for a specific attribute for all nodes
+
+    Parameters
+    ----------
+    target : Axis object
+        Target axis to plot onto.
+    res : pandas DataFram
+        Result data from dynamic simulation.
+    attr : str
+        Attribute matching a column in the DataFrame.
+
+    Returns
+    -------
+    None.
+
+    """
+    # Get all the labels for that attribute
     columns = [name for name in res.columns if attr in name]
     short_names = [name[:2] for name in columns]
     
-    if columns[0][4] == 'V' :
+    if columns[0][3] == 'V' :
         ylabel = 'Voltage (V)' 
     else:
         ylabel = 'Current (A)'
     
-    # Plot voltages
+    # Plot the attribute for all nodes
     res.plot(subplots=False, ax=target, legend=True, sharex=False, sharey=False,
-             x = 'Time', y = columns[:3], 
+             x = 'Time', y = columns, 
              xlabel='Time (ns)', ylabel=ylabel, label=short_names)
     
     target.set_title(attr)
@@ -265,7 +283,7 @@ def subplot_chain(target, res, nodes, data_label) :
     
     res.plot(subplots=False, ax=target, legend=short_names, sharex=False, sharey=False,
              x = 'Time', y = columns, label=short_names,
-             xlabel='Time (ns)', ylabel='Current (A)')
+             xlabel='Time (ns)', ylabel='Current (nA)')
     
 def listToString(s) :
     str1 = "" 
@@ -284,9 +302,13 @@ def plot_chainlist(res, G, source, target) :
     fig, axs = plt.subplots(Nrows, Ncols, 
                             figsize=(nature_single*Ncols, nature_single*Nrows))
     
-    for k, ax in enumerate(axs) :
-        subplot_chain(ax, res, paths[k], 'Iout')
-        ax.set_title('Iout-chain'+listToString(paths[k]))
+    if Npaths > 1 :
+        for k, ax in enumerate(axs) :
+            subplot_chain(ax, res, paths[k], 'Iout')
+            ax.set_title('Iout-chain'+listToString(paths[k]))
+    else :
+        subplot_chain(axs, res, paths[0], 'Iout')
+        axs.set_title('Iout-chain'+listToString(paths[0]))
         
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
@@ -294,27 +316,114 @@ def plot_chainlist(res, G, source, target) :
 def plot_nodes(res, nodes, plot_all=False) :
     
     N = len(nodes)
-    Nrows = max(N // 3,1)  # choose three in a row as max
+    Nrows = max( N // 3 + int(bool(N % 3)), 1 )  # choose three in a row as max
     Ncols = min(3,N)
     fig, axs = plt.subplots(Nrows, Ncols, 
                             figsize=(nature_single*Ncols, nature_single*Nrows))
     
-    for k, ax in enumerate(axs) :
-        subplot_node(ax, res, nodes[k], plot_all)
+    if N > 1 :
+        for k, ax in enumerate(axs.flatten()) :
+            if k < N :
+                subplot_node(ax, res, nodes[k], plot_all)
+    else:
+        subplot_node(axs, res, nodes[0], plot_all)
         
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
     
+    
 def plot_attributes(res, attr) :
+    """
+    Plots a set of chosen attributes for all nodes
+    
+    Parameters
+    ----------
+    res : pandas DataFrame
+        Result data from dynamic simulation.
+    attr : list
+        List of attributes to be plotted, each generates a subplot
+
+    Returns
+    -------
+    None.
+
+    """
     
     N = len(attr)
-    Nrows = N // 3 + 1 # choose three in a row as max
+    # An ugly discrete function but it does its job
+    Nrows = max( N // 3 + int(bool(N % 3)), 1 )  # choose three in a row as max
     Ncols = min(3,N)
     fig, axs = plt.subplots(Nrows, Ncols, 
                             figsize=(nature_single*Ncols, nature_single*Nrows))
     
-    for k, ax in enumerate(axs) :
+    for k, ax in enumerate(axs.flatten()) : # flatten in case of 2D array
+        # Generate subplot through this specific function
         subplot_attr(ax, res, attr[k])
         
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
+    
+def visualize_transistor(handle, IV_example):
+    """
+    Visualizes the transistor function
+
+    Parameters
+    ----------
+    handle : function
+        Function handle of the transistor IV from the physics module.
+    Vgate : numpy array
+        Values of Vgate to be included in the plots.
+
+    Returns
+    -------
+    None.
+
+    """
+    # Generate the pandas DataFrame    
+    Nrows = 1  
+    Ncols = 2
+    fig, axs = plt.subplots(Nrows, Ncols, 
+                            figsize=(nature_single*Ncols, nature_single*Nrows))
+    
+    yscale = ['linear','log']
+    
+    for k, ax in enumerate(axs) :
+        IV_example.plot(subplots=False, ax=ax, sharex=False, sharey=False,
+                        x = 'Vgate', y = 'Current',label=yscale[k],
+                        xlabel='Vgate (V)', ylabel='Current (uA)')
+        if k == 0 :
+            ax.set_ylim(0,10)
+        ax.set_yscale(yscale[k])
+        ax.grid('True')
+    
+    #plt.legend()    
+    plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
+    plt.tight_layout()
+    
+def visualize_LED_efficiency(example) :
+    """
+    Visualizes the internal quantum efficiency used by the model
+
+    Parameters
+    ----------
+    handle : function
+        Function that takes I as an input and generates an internal quantum 
+        efficiency eta. 
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    fig, ax = plt.subplots(figsize=(nature_single, nature_single))
+    
+    example.plot(subplots=False, ax=ax, sharex=False, sharey=False,
+                 x = 'Current (uA)', y = 'eta, IQE')
+                 #xlabel='Current (uA)', ylabel='Current (uA)')
+                 
+    #ax.set_ylim(0,10)
+    ax.set_xscale('log')    
+    ax.grid('True')
+    plt.tight_layout()
+                          

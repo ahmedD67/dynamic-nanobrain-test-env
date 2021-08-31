@@ -52,7 +52,7 @@ class Layer :
 class HiddenLayer(Layer) :
     
     def __init__(self, N, output_channel, inhibition_channel, excitation_channel, 
-                 gammas=np.zeros(6), func_Vgate_to_Isd=None, V_thres=1.2):
+                 gammas=np.zeros(6), func_Vgate_to_Isd=None, func_eta_LED=None, V_thres=1.2):
         
         Layer.__init__(self, N, layer_type='hidden')
         # Connections to the outside world
@@ -62,12 +62,16 @@ class HiddenLayer(Layer) :
         # Phsyics variables
         self.gammas = gammas
         self.func_Vgate_to_Isd = func_Vgate_to_Isd
+        self.func_eta_LED = func_eta_LED
         self.A = self.calc_A(*gammas[:-1]) # exclude gled
         # Set up internal variables
         self.V = np.zeros((NV,self.N))
         self.B = np.zeros_like(self.V)
         self.dV= np.zeros_like(self.V)
+        # I is the current through the LED
         self.I = np.zeros(self.N)
+        # Power is the outputted light, in units of current
+        self.P = np.zeros(self.N)
         self.ISD = np.zeros_like(self.I)
         self.V_thres = V_thres
          
@@ -76,7 +80,7 @@ class HiddenLayer(Layer) :
         gsum = g13+g23+g33
         Amat = np.array([[-g11, 0, g11],
                          [0, -g22, g22],
-                         [g13, g23, -gsum]])
+                         [g13, g23, -gsum]]) # rows: inh, exc, gate
     
         return Amat    
     
@@ -93,13 +97,20 @@ class HiddenLayer(Layer) :
     def update_V(self, dt) :
         self.V += dt*self.dV
         # Voltage clipping
-        if self.V > self.V_thres :
-            self.V = self.V_thres
+        #if self.V > self.V_thres :
+        #    self.V = self.V_thres
+        # Second try at voltage clipping
+        mask = (self.V > self.V_thres)
+        self.V[mask] = self.V_thres
+        mask = (self.V < -1*self.V_thres)
+        self.V[mask] = -1*self.V_thres
     
     def update_I(self, dt) :
         # Get the source drain current from the transistor IV
         self.ISD = self.func_Vgate_to_Isd(self.V[2])
         self.I += dt*self.gammas[-1]*(self.ISD-self.I)
+        # Convert current to power through efficiency function
+        self.P = self.I*self.func_eta_LED(self.I)
     
     def reset_B(self) :
         self.B[:,:] = 0
@@ -116,6 +127,9 @@ class HiddenLayer(Layer) :
         W = weights.W
         BM = np.einsum('ijk,ik->ij',W,C)
         self.B += E @ BM
+        # Normalize with the correct capactiances and units to get units of V/ns
+        self.B[0,:] *= 1eX/Cinh
+        self.B[1,:] *= 1eX/Cexc
     
 # Inherits Layer
 class InputLayer(Layer) :

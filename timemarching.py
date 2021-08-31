@@ -34,13 +34,13 @@ def evolve(t, layers, dVmax, dtmax) :
     
     return dt
             
-def update(dt, t, layers, weights) :   
+def update(dt, t, layers, weights, unity_coeff=1.0) :   
     # Time updating sequence
     # Update first all voltages V and reset currents in matrices B
     for layer in layers.values() :
         if layer.layer_type == 'hidden' :
             layer.update_V(dt)
-            layer.update_I(dt)
+            layer.update_I(dt) 
         
         if layer.layer_type == 'input' :
             layer.update_C(t)
@@ -53,9 +53,12 @@ def update(dt, t, layers, weights) :
         to_idx = w.to_layer
         if layers[from_idx].layer_type == 'hidden' :
             # Inner matrix product with currents from D
-            C = np.einsum('i,j->ij',w.D,layers[from_idx].I)
+            C = np.einsum('i,j->ij',w.D,layers[from_idx].P)
+            # At this point we normalize with the unity coupling coefficient
+            C *= unity_coeff
         else :
             C = layers[from_idx].C
+       
         
         layers[to_idx].update_B(w,C)
     
