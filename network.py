@@ -52,18 +52,14 @@ class Layer :
 class HiddenLayer(Layer) :
     
     def __init__(self, N, output_channel, inhibition_channel, excitation_channel, 
-                 gammas=np.zeros(6), func_Vgate_to_Isd=None, func_eta_LED=None, V_thres=1.2):
+                 device=None, Vthres=1.2) :
         
         Layer.__init__(self, N, layer_type='hidden')
         # Connections to the outside world
         self.out_channel = output_channel
         self.inh_channel = inhibition_channel
         self.exc_channel = excitation_channel
-        # Phsyics variables
-        self.gammas = gammas
-        self.func_Vgate_to_Isd = func_Vgate_to_Isd
-        self.func_eta_LED = func_eta_LED
-        self.A = self.calc_A(*gammas[:-1]) # exclude gled
+
         # Set up internal variables
         self.V = np.zeros((NV,self.N))
         self.B = np.zeros_like(self.V)
@@ -73,44 +69,36 @@ class HiddenLayer(Layer) :
         # Power is the outputted light, in units of current
         self.P = np.zeros(self.N)
         self.ISD = np.zeros_like(self.I)
-        self.V_thres = V_thres
-         
-    # System matrix
-    def calc_A(self,g11,g22,g13,g23,g33) :
-        gsum = g13+g23+g33
-        Amat = np.array([[-g11, 0, g11],
-                         [0, -g22, g22],
-                         [g13, g23, -gsum]]) # rows: inh, exc, gate
-    
-        return Amat    
-    
-    # Preferred way to set gammas as it updates A
-    def set_gammas(self, gammas) :
-        self.gammas = gammas
-        self.A = self.calc_A(*gammas[:-1]) # exclude gled
+        self.Vthres = Vthres
+
+        # Device object hold A, for example
+        self.device=device
+
+    def assign_device(self, device) :
+        self.device=device
         
     # Provide derivative
-    def get_dV(self, t) :
-         self.dV = self.A @ self.V + self.B
-         return self.dV
+    def get_dV(self, t) :     
+        self.dV = self.device.A @ self.V + self.B
+        return self.dV
         
     def update_V(self, dt) :
         self.V += dt*self.dV
         # Voltage clipping
-        #if self.V > self.V_thres :
-        #    self.V = self.V_thres
+        #if self.V > self.Vthres :
+        #    self.V = self.Vthres
         # Second try at voltage clipping
-        mask = (self.V > self.V_thres)
-        self.V[mask] = self.V_thres
-        mask = (self.V < -1*self.V_thres)
-        self.V[mask] = -1*self.V_thres
+        mask = (self.V > self.Vthres)
+        self.V[mask] = self.Vthres
+        mask = (self.V < -1*self.Vthres)
+        self.V[mask] = -1*self.Vthres
     
     def update_I(self, dt) :
         # Get the source drain current from the transistor IV
-        self.ISD = self.func_Vgate_to_Isd(self.V[2])
-        self.I += dt*self.gammas[-1]*(self.ISD-self.I)
+        self.ISD = self.device.transistorIV(self.V[2])
+        self.I += dt*self.device.gammas[-1]*(self.ISD-self.I)
         # Convert current to power through efficiency function
-        self.P = self.I*self.func_eta_LED(self.I)
+        self.P = self.I*self.device.eta_ABC(self.I)
     
     def reset_B(self) :
         self.B[:,:] = 0
@@ -126,23 +114,24 @@ class HiddenLayer(Layer) :
         E = weights.E
         W = weights.W
         BM = np.einsum('ijk,ik->ij',W,C)
-        self.B += E @ BM
+        B_to_add = E @ BM 
         # Normalize with the correct capactiances and units to get units of V/ns
-        self.B[0,:] *= 1eX/Cinh
-        self.B[1,:] *= 1eX/Cexc
+        # This could be inserted into E, 5 lines above
+        B_to_add[0,:] *= 1e-18/self.device.p_dict['Cinh']
+        B_to_add[1,:] *= 1e-18/self.device.p_dict['Cexc']
+        self.B += B_to_add
     
 # Inherits Layer
 class InputLayer(Layer) :
-    
-    # These dictonaries hold function handles and arguments
-    input_func_handles={}
-    input_func_args={}
-    
+        
     def __init__(self, input_channels):
         Layer.__init__(self, len(input_channels), layer_type='input')
         self.channels = input_channels
         self.C = np.zeros((self.N,self.N))
         self.I = np.zeros(self.N)
+        # These dictonaries hold function handles and arguments
+        self.input_func_handles={}
+        self.input_func_args={}
 
     def set_input_func(self, channel, func_handle, func_args) :
         self.input_func_handles[channel] = func_handle
@@ -152,7 +141,7 @@ class InputLayer(Layer) :
         # Work on class object self.I instead of an arbitrary thing
         for key in self.channels :
             try :
-                self.I[self.channels[key]] = self.input_func_handles[key](t,self.input_func_args[key])
+                self.I[self.channels[key]] = self.input_func_handles[key](t,*self.input_func_args[key])
             except :
                 pass
             
@@ -171,10 +160,32 @@ class OutputLayer(Layer) :
     
     def __init__(self, output_channels) :
         Layer.__init__(self, len(output_channels), layer_type='output')
+        self.channels = output_channels
+        self.C = np.zeros((self.N,self.N))
+        self.B = np.zeros_like(self.C)
+        self.I = np.zeros(self.N)
+        # These dictonaries hold function handles and arguments
+        self.output_func_handles={}
+        self.output_func_args={}
+    
+    def set_output_func(self, channel, func_handle, func_args) :
+        self.output_func_handles[channel] = func_handle
+        self.output_func_args[channel] = func_args
+        
+    def get_output_current(self, t) :
+        # Work on class object self.I instead of an arbitrary thing
+        for key in self.channels :
+            try :
+                self.I[self.channels[key]] = self.output_func_handles[key](t,*self.output_func_args[key])
+            except :
+                pass
+            
+        return self.I
     
     def update_B (self, weights, C) :
         # B is automatically allocated using this procedure
         W = weights.W
+        # This automatically yields current in nA
         self.B += np.einsum('ijk,ik->ij',W,C)
     
     def reset_B(self) :
@@ -183,7 +194,15 @@ class OutputLayer(Layer) :
             self.B[:,:] = 0
         except :
             self.B = 0
-    
+            
+    def update_C_from_B(self,t) :
+        # Here it is possible to add a nonlinear function as well
+        self.C = np.copy(self.B)
+        
+    def update_C(self,t) :
+        # Create a matrix out of the output currents
+        self.C = np.diag(self.get_output_current(t))
+        
 # Connect layers and create a weight matrix
 def connect_layers(down, up, layers, channels) :
     
@@ -201,7 +220,7 @@ def connect_layers(down, up, layers, channels) :
             L1 = layers[up]
             self.W = np.zeros((self.M,L1.N,L0.N))
             
-            # Check for connetions to hidden layers
+            # Check for connections to hidden layers
             if L1.layer_type == 'hidden' :
                 self.initialize_E(L1)
             if L0.layer_type == 'hidden' :
@@ -256,6 +275,9 @@ def connect_layers(down, up, layers, channels) :
                       
         def set_W(self, key, W) :
             self.W[self.channels[key],:,:] = W
+            
+        def ask_W(self) :
+            print(f'Set weights by set_W(channel key, array of size M x N \nwith {self.W[0,:,:].shape}')
             
     return Weights(down,up,layers,channels)
     

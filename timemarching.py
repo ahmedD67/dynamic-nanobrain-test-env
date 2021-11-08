@@ -8,6 +8,31 @@ Created on Thu Jun  3 15:18:44 2021
 
 import numpy as np
 
+def check_physics(layers) :
+    """
+    Small routine to check so that there is a device attached to the hidden
+    layer nodes
+
+    Parameters
+    ----------
+    layers : dictionary of layer objects
+
+    Raises
+    ------
+    Exception
+        If there is no attached Device object
+
+    Returns
+    -------
+    None.
+
+    """
+    for layer in layers.values() :
+        if layer.layer_type == 'hidden' :
+            if layer.device is None :
+                print('Error: No device assigned to hidden layer')
+                raise Exception
+    
 # TODO: This part should be updated with an algorithm takes a time-step also
 # in input currents to check if the time-step needs to be limited due to a 
 # future pulse. For this the input currents need to updated 'ahead of time'
@@ -34,7 +59,7 @@ def evolve(t, layers, dVmax, dtmax) :
     
     return dt
             
-def update(dt, t, layers, weights, unity_coeff=1.0) :   
+def update(dt, t, layers, weights, unity_coeff=1.0, teacher_forcing=False) :   
     # Time updating sequence
     # Update first all voltages V and reset currents in matrices B
     for layer in layers.values() :
@@ -44,7 +69,15 @@ def update(dt, t, layers, weights, unity_coeff=1.0) :
         
         if layer.layer_type == 'input' :
             layer.update_C(t)
-            
+        
+        # This should be done after receiving the information from the network
+        if layer.layer_type == 'output' :
+            if teacher_forcing :
+                layer.update_C(t)           
+            else :
+                # Send the signals back into the network, if connected
+                layer.update_C_from_B(t)
+                          
         layer.reset_B()
     
     # Now we rewrite the currents B according to the weight rules

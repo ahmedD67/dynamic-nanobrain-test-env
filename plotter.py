@@ -77,12 +77,16 @@ def retrieve_G(layers, weights) :
     
     return G
     
-def visualize_network(layers, weights, node_size=600, layout='multipartite', show_edge_labels=True, shell_order=None) :
+def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='multipartite', show_edge_labels=True, shell_order=None) :
     edges = {}
     for key in weights :
         edges[key] = name_edges(weights[key],layers)
     
     nodes = name_nodes(layers)
+    for key in exclude_nodes :
+        for node in exclude_nodes[key] :
+            nodes[key].remove(node)
+        
     
     # Construct a graph
     G = nx.DiGraph()
@@ -136,8 +140,13 @@ def visualize_network(layers, weights, node_size=600, layout='multipartite', sho
             nlist = nlist[::-1]
             
         else :
-            for key in shell_order :
-                nlist.append(nodes[key])
+            for entry in shell_order :
+                if type(entry) is list:
+                    nlist.append(nodes[entry[0]])
+                    for k in range(1,len(entry)) :
+                        nlist[-1] += nodes[entry[k]]
+                else :
+                    nlist.append(nodes[entry])
                 
         pos=nx.shell_layout(G,nlist=nlist)
         
@@ -145,15 +154,19 @@ def visualize_network(layers, weights, node_size=600, layout='multipartite', sho
         print('Sorry, layout not implemented, reverting back to multipartite')
         pos=nx.multipartite_layout(G)
         
+    # Try simple scaling
+    c = node_size/600
+    
     nx.draw_networkx_nodes(G, pos, cmap=plt.get_cmap('Blues'), 
-                       node_color = values, vmin=0., vmax=1.0,
-                       node_size = 600)
-    nx.draw_networkx_labels(G, pos)
+                           node_color = values, vmin=0., vmax=1.0,
+                           node_size = node_size)
+    nx.draw_networkx_labels(G, pos, font_size=(6+c*6))
     nx.draw_networkx_edges(G, pos, edgelist=red_edges, edge_color='r', 
                            arrows=True, arrowsize=20,node_size=node_size)
     nx.draw_networkx_edges(G, pos, edgelist=black_edges, edge_color=edge_colors,
                            arrows=True, arrowsize=20,node_size=node_size,
-                           width=edge_weights)
+                           width=edge_weights,
+                           connectionstyle='arc3,rad=.2')
 
                           # connectionstyle='arc3,rad=0.2')
     if show_edge_labels :
@@ -224,8 +237,9 @@ def subplot_node(target, res, node, plot_all=False) :
     columns = [name for name in res.columns if node in name]
 
     if not plot_all :
-        # Choose voltages and Iout, Pout, 5 columns
-        columns = columns[0:3] + [columns[5]] + [columns[7]]
+        # Choose voltages and Iexc, Pout, 5 columns
+        columns = columns[0:3] + [columns[4]] + [columns[7]]
+
 
     # Plot voltages
     res.plot(subplots=False, ax=target, legend=True, sharex=True, sharey=False,
@@ -235,6 +249,8 @@ def subplot_node(target, res, node, plot_all=False) :
     ax2 = res.plot(subplots=False, ax=target, legend=True, sharex=True, sharey=False,
                    secondary_y=True, xlabel='Time (ns)',
                    x = 'Time', y = columns[3:], style = '--')
+    
+    
     
     # The plot wrapper actually spits out a new axis that we can use  
     ax2.set_ylabel('Currents (nA)')
@@ -293,14 +309,18 @@ def listToString(s) :
     # return string  
     return str1
     
-def plot_chainlist(res, G, source, target) :
+def plot_chainlist(res, G, source, target, doublewidth=True) :
     paths = list(simple_paths(G, source, target))
     Npaths = len(paths)
     Nrows = Npaths // 3 + 1 # choose three in a row as max
     Ncols = min(3,Npaths)
-    
+    if doublewidth : 
+        nature_width = nature_double 
+    else :  
+        nature_width = nature_single
+        
     fig, axs = plt.subplots(Nrows, Ncols, 
-                            figsize=(nature_single*Ncols, nature_single*Nrows))
+                            figsize=(nature_width*Ncols, nature_single*Nrows))
     
     if Npaths > 1 :
         for k, ax in enumerate(axs) :
@@ -313,13 +333,20 @@ def plot_chainlist(res, G, source, target) :
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
     
-def plot_nodes(res, nodes, plot_all=False) :
+def plot_nodes(res, nodes, plot_all=False, onecolumn=False, doublewidth=True) :
     
     N = len(nodes)
     Nrows = max( N // 3 + int(bool(N % 3)), 1 )  # choose three in a row as max
     Ncols = min(3,N)
+    
+    if onecolumn : Nrows = N ; Ncols = 1
+    if doublewidth : 
+        nature_width = nature_double 
+    else :  
+        nature_width = nature_single
+        
     fig, axs = plt.subplots(Nrows, Ncols, 
-                            figsize=(nature_single*Ncols, nature_single*Nrows))
+                            figsize=(nature_width*Ncols, nature_single*Nrows))
     
     if N > 1 :
         for k, ax in enumerate(axs.flatten()) :
@@ -332,7 +359,7 @@ def plot_nodes(res, nodes, plot_all=False) :
     plt.tight_layout()
     
     
-def plot_attributes(res, attr) :
+def plot_attributes(res, attr, onecolumn=False, doublewidth=True) :
     """
     Plots a set of chosen attributes for all nodes
     
@@ -353,17 +380,28 @@ def plot_attributes(res, attr) :
     # An ugly discrete function but it does its job
     Nrows = max( N // 3 + int(bool(N % 3)), 1 )  # choose three in a row as max
     Ncols = min(3,N)
-    fig, axs = plt.subplots(Nrows, Ncols, 
-                            figsize=(nature_single*Ncols, nature_single*Nrows))
     
-    for k, ax in enumerate(axs.flatten()) : # flatten in case of 2D array
-        # Generate subplot through this specific function
-        subplot_attr(ax, res, attr[k])
+    if onecolumn : Nrows = N ; Ncols = 1
+    if doublewidth : 
+        nature_width = nature_double 
+    else :  
+        nature_width = nature_single
         
+    fig, axs = plt.subplots(Nrows, Ncols, 
+                            figsize=(nature_width*Ncols, nature_single*Nrows))
+    
+    # Check case when only one attribute is wanted
+    if N > 1 :          
+        for k, ax in enumerate(axs.flatten()) : # flatten in case of 2D array
+            # Generate subplot through this specific function
+            subplot_attr(ax, res, attr[k])
+    else :
+        subplot_attr(axs, res, attr[0])
+    
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
     
-def visualize_transistor(handle, IV_example):
+def visualize_transistor(IV_examples,labels=None):
     """
     Visualizes the transistor function
 
@@ -388,9 +426,25 @@ def visualize_transistor(handle, IV_example):
     yscale = ['linear','log']
     
     for k, ax in enumerate(axs) :
-        IV_example.plot(subplots=False, ax=ax, sharex=False, sharey=False,
-                        x = 'Vgate', y = 'Current',label=yscale[k],
-                        xlabel='Vgate (V)', ylabel='Current (uA)')
+        if type(IV_examples) is list :
+            for m in range(len(IV_examples)) :
+                if labels is not None:
+                    _label = labels[m]+yscale[k]
+                else :
+                    _label = yscale[k]
+                    
+                IV_examples[m].plot(subplots=False, ax=ax, sharex=False, sharey=False,
+                                    x = 'Vgate', y = 'Current',label=_label,
+                                    xlabel='Vgate (V)', ylabel='Current (uA)')
+        else :
+            if labels is not None:
+                _label = labels+yscale[k]
+            else :
+                _label = yscale[k]
+                
+            IV_examples.plot(subplots=False, ax=ax, sharex=False, sharey=False,
+                             x = 'Vgate', y = 'Current',label=_label,
+                             xlabel='Vgate (V)', ylabel='Current (uA)')
         if k == 0 :
             ax.set_ylim(0,10)
         ax.set_yscale(yscale[k])
