@@ -133,7 +133,7 @@ class InputLayer(Layer) :
         self.input_func_handles={}
         self.input_func_args={}
 
-    def set_input_func(self, channel, func_handle, func_args) :
+    def set_input_func(self, channel, func_handle, func_args=None) :
         self.input_func_handles[channel] = func_handle
         self.input_func_args[channel] = func_args
         
@@ -141,7 +141,10 @@ class InputLayer(Layer) :
         # Work on class object self.I instead of an arbitrary thing
         for key in self.channels :
             try :
-                self.I[self.channels[key]] = self.input_func_handles[key](t,*self.input_func_args[key])
+                if self.input_func_args[key] is not None:
+                    self.I[self.channels[key]] = self.input_func_handles[key](t,*self.input_func_args[key])
+                else :
+                    self.I[self.channels[key]] = self.input_func_handles[key](t)
             except :
                 pass
             
@@ -168,7 +171,7 @@ class OutputLayer(Layer) :
         self.output_func_handles={}
         self.output_func_args={}
     
-    def set_output_func(self, channel, func_handle, func_args) :
+    def set_output_func(self, channel, func_handle, func_args=None) :
         self.output_func_handles[channel] = func_handle
         self.output_func_args[channel] = func_args
         
@@ -176,7 +179,10 @@ class OutputLayer(Layer) :
         # Work on class object self.I instead of an arbitrary thing
         for key in self.channels :
             try :
-                self.I[self.channels[key]] = self.output_func_handles[key](t,*self.output_func_args[key])
+                if self.output_func_args[key] is not None:
+                    self.I[self.channels[key]] = self.output_func_handles[key](t,*self.output_func_args[key])
+                else :
+                    self.I[self.channels[key]] = self.output_func_handles[key](t)
             except :
                 pass
             
