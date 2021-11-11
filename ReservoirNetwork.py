@@ -50,9 +50,9 @@ Nreservoir = 20
 # An input layer automatically creates on node for each channel that we define
 layers[0] = nw.InputLayer(input_channels=channels)
 # Forward signal layer
-layers[1] = nw.HiddenLayer(Nreservoir//2, output_channel='blue',excitation_channel='blue',inhibition_channel='red')
+layers[1] = nw.HiddenLayer(Nreservoir//2, output_channel='blue',excitation_channel=('blue','green'),inhibition_channel='red')
 # Inhibiting memory layer
-layers[2] = nw.HiddenLayer(Nreservoir//2, output_channel='red' ,excitation_channel='blue',inhibition_channel='red')
+layers[2] = nw.HiddenLayer(Nreservoir//2, output_channel='red' ,excitation_channel=('blue','green'),inhibition_channel='red')
 layers[3] = nw.OutputLayer(output_channels=channels) # similar to input layer
 
 # %% [markdown]
@@ -85,8 +85,8 @@ weights['out->hd1'] = nw.connect_layers(3, 2, layers, channels)
 # Setup parameters for the network
 
 # %%
-sparsity = 0.90
-spectral_radius = 1.0
+sparsity = 0.50
+spectral_radius = 2.0
 # One number per channel, blue, red, green
 input_scaling = [1.0,1.0,0.1]
 output_scaling= [1.0,1.0,1.0]
@@ -179,17 +179,19 @@ W_inout = rng.rand(Nreservoir,len(channels))
 # Ask the weights object which dimensions to be in
 weights['out->hd0'].ask_W()
 
-# Put each weight column in a specific channel
-for key in channels :
-    # Greem is the bias and not forwarded to output
-    if key != 'green' :
-        k = channels[key]
-        W_key = np.zeros_like(W_inout)
-        # Pick a column
-        W_key[:,k] = W_inout[:,k]
-        weights['out->hd0'].set_W(key,teacher_scaling[k]*W_key[:Nreservoir//2,:])
-        weights['out->hd1'].set_W(key,teacher_scaling[k]*W_key[Nreservoir//2:,:])
-        
+back_from_output = False
+if (back_from_output) :
+    # Put each weight column in a specific channel
+    for key in channels :
+        # Greem is the bias and not forwarded to output
+        if key != 'green' :
+            k = channels[key]
+            W_key = np.zeros_like(W_inout)
+            # Pick a column
+            W_key[:,k] = W_inout[:,k]
+            weights['out->hd0'].set_W(key,teacher_scaling[k]*W_key[:Nreservoir//2,:])
+            weights['out->hd1'].set_W(key,teacher_scaling[k]*W_key[Nreservoir//2:,:])
+            
 # Print to make sure it looks ok
 weights['out->hd0'].print_W()
 weights['out->hd1'].print_W()
@@ -223,14 +225,10 @@ propagator = physics.Device('device_parameters.txt')
 # Specify the internal dynamics by supplying the RC constants to the hidden layer (six parameters)
 layers[1].assign_device(propagator)
 layers[2].assign_device(propagator)
-# Tweak the threshold voltage
-Vthres=0.5
-layers[1].Vthres=Vthres
-layers[2].Vthres=Vthres
 
 # Calculate the unity_coeff to scale the weights accordingly
-unity_coeff, Imax = propagator.inverse_gain_coefficient(propagator.eta_ABC, Vthres)
-print(f'Unity coupling coefficient calculated as unity_coeff={unity_coeff:.4f}')
+unity_coeff, Imax = propagator.inverse_gain_coefficient(propagator.eta_ABC, layers[1].Vthres)
+print(f'Unity coupling coefficient calculated as unity_coeff={unity_coeff:.4f}, Imax as {Imax:.2f} nA')
 
 # %% [markdown] Setup the input/output for training
 # ### Input and outputs to train the network
@@ -279,25 +277,15 @@ bias_signal = lambda t : signal_scale
 # %% 
 # Plot the frequency control and periods together
 
-fig, (ax1, ax2, ax3) = plt.subplots(1,3)
-
-ax1.plot(tseries[:1000],frequency_input[:1000,1])
-ax2.plot(tseries[:1000],frequency_output[:1000])
-#ax3.plot(frequency_output[:1000])
-#ax2.plot(periods[:1000])
-
-plt.show
-# %% 
-# Plot the frequency control and periods together
-
-fig, (ax1, ax2, ax3) = plt.subplots(1,3)
-
-ax1.plot(tseries,frequency_input[:,1])
-ax2.plot(tseries,frequency_output[:])
-#ax3.plot(frequency_output[:1000])
-#ax2.plot(periods[:1000])
-
-plt.show
+if False :
+    fig, (ax1, ax2, ax3) = plt.subplots(1,3)
+    
+    ax1.plot(tseries[:1000],frequency_input[:1000,1])
+    ax2.plot(tseries[:1000],frequency_output[:1000])
+    #ax3.plot(frequency_output[:1000])
+    #ax2.plot(periods[:1000])
+    
+    plt.show
 
 # %% [markdown]
 # Here we specify the external signals, bias, input and teacher signal
@@ -312,17 +300,18 @@ if (use_random) :
 # We don't put the teacher's signal in the inhibition channel just yet
 
 # Play around with standard signals
-t_blue = [(5.0,6.0), (8.0,8.5), (9.0,9,5), (10.0,11.0), (20.0,21.0), (30.0,31.0)] # 
-#t_blue = [(5.0,6.0), (8.0,8.5), (9.0,9,5), (10.0,11.0)] # 
+t_blue = [(5.0,7.0)] # 3, (8.0,8.5), (9.0,9,5), (10.0,11.0), (20.0,21.0), (30.0,31.0)] # 
+t_red = [(5.0,10.0)] #, (9.0,9,5), (10.0,11.0)] # 
 
 # Scale
-signal_scale = 20*Imax
+signal_scale = 0.0*Imax
 bias_signal = lambda t : signal_scale
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
-layers[0].set_input_func(channel='blue',func_handle=physics.square_pulse, func_args=(t_blue, 3.0*Imax))
+layers[0].set_input_func(channel='blue',func_handle=physics.square_pulse, func_args=(t_blue, 3*Imax))
+#layers[0].set_input_func(channel='red',func_handle=physics.square_pulse, func_args=(t_red, Imax))
 layers[0].set_input_func(channel='green',func_handle=bias_signal)
-#layers[0].set_input_func(channel='red',func_handle=physics.square_pulse, func_args=(t_red, 3.0*Imax))
+layers[3].set_output_func(channel='blue',func_handle=bias_signal)
 
 # %% [markdown]
 # ### 6. Evolve in time
@@ -395,32 +384,15 @@ plotter.visualize_dynamic_result(result,'I2-Iout-green')
 
 # %%
 # Variable G contains a graph object descibing the network
-G = plotter.retrieve_G(layers, weights)
-plotter.plot_chainlist(result,G,'I1','K0')
+# G = plotter.retrieve_G(layers, weights)
+#plotter.plot_chainlist(result,G,'I1','O1')
 
 # %% [markdown]
 # Plot specific attributes
 
 # %%
 attr_list = ['Vgate','Vexc']
-plotter.plot_attributes(result, attr_list)
+#plotter.plot_attributes(result, attr_list)
 
-# %% [markdown]
-# We can be totally specific if we want. First we list the available columns to choose from
-
-# %%
-print(result.columns)
-
-# %%
-plotter.visualize_dynamic_result(result, ['I0-Iout-red','I1-Iout-blue'])
-
-# %%
-plotter.visualize_dynamic_result(result, ['H0-Iout','H0-Pout','K0-Iout','K0-Pout'])
-
-# %%
-plotter.visualize_transistor(propagator.transistorIV,propagator.transistorIV_example())
-
-# %%
-plotter.visualize_LED_efficiency(propagator.eta_example(propagator.eta_ABC))
 
 # %%

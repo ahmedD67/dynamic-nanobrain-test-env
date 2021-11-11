@@ -57,6 +57,7 @@ class HiddenLayer(Layer) :
         Layer.__init__(self, N, layer_type='hidden')
         # Connections to the outside world
         self.out_channel = output_channel
+        # These can be multiple, care taken in the constructing of weights
         self.inh_channel = inhibition_channel
         self.exc_channel = excitation_channel
 
@@ -161,7 +162,7 @@ class InputLayer(Layer) :
 # Inherits Layer    
 class OutputLayer(Layer) :
     
-    def __init__(self, output_channels) :
+    def __init__(self, output_channels, teacher_delay=None) :
         Layer.__init__(self, len(output_channels), layer_type='output')
         self.channels = output_channels
         self.C = np.zeros((self.N,self.N))
@@ -170,6 +171,14 @@ class OutputLayer(Layer) :
         # These dictonaries hold function handles and arguments
         self.output_func_handles={}
         self.output_func_args={}
+        self.teacher_delay=teacher_delay
+
+    def set_teacher_delay(self,delay) :
+        # introduce a class variable to handle time delays
+        self.teacher_delay=delay
+        self.search_teacher=0
+        # t and then B11, B12..
+        self.teacher_memory=np.zeros((len(self.B.flatten())+1))
     
     def set_output_func(self, channel, func_handle, func_args=None) :
         self.output_func_handles[channel] = func_handle
@@ -201,9 +210,37 @@ class OutputLayer(Layer) :
         except :
             self.B = 0
             
+    def lin_intp(self,x,f) :
+        # specify interval
+        x0 = f[0,0]
+        x1 = f[1,0]
+        p1 = (x-x0)/(x1-x0) # fraction to take of index 1
+        p0 = 1-p1 # fraction to take from index 1
+        return p0*f[0]+p1*f[1]
+            
     def update_C_from_B(self,t) :
         # Here it is possible to add a nonlinear function as well
-        self.C = np.copy(self.B)
+        # Need to take the delay into account here
+        if self.teacher_delay is not None :
+            # First, we need to store B with correct time-stamp
+            self.teacher_memory=np.vstack((self.teacher_memory,np.concatenate((np.array([t]),self.B.flatten()))))
+            # Now we choose the correct memory point to choose from
+            t_find = max(t-self.teacher_delay,0) # starts at 0
+            # Search for point just before t
+            while t_find > self.teacher_memory[self.search_teacher,0] :
+                self.search_teacher += 1
+            
+            if self.search_teacher > 0 :
+                teacher_signal = self.lin_intp(t_find,
+                                               self.teacher_memory[self.search_teacher-1:self.search_teacher+1])
+            else : 
+                teacher_signal = self.teacher_memory[0]
+            
+            B_for_update = teacher_signal[1:].reshape((self.N,self.N))
+        else :
+            B_for_update = self.B
+            
+        self.C = np.copy(B_for_update)
         
     def update_C(self,t) :
         # Create a matrix out of the output currents
@@ -241,8 +278,16 @@ def connect_layers(down, up, layers, channels) :
         def initialize_E(self,L1) :
             # These channels are specific to L1 and could be reversed
             # compared to other nodes!
-            inh_channel = self.channels[L1.inh_channel]
-            exc_channel = self.channels[L1.exc_channel]
+            # Now with support for multiple inhibitory and excitatory channels
+            try :
+                inh_channel = [self.channels[channel] for channel in L1.inh_channel]
+            except : # if inh_channel is not an iterable
+                inh_channel = self.channels[L1.inh_channel] # old version
+            try :
+                exc_channel = [self.channels[channel] for channel in L1.exc_channel]
+            except :
+                exc_channel = self.channels[L1.exc_channel] # old version
+                
             self.E = np.zeros((NV,self.M))
             self.E[0,inh_channel]=-1. # inhibiting channel!
             self.E[1,exc_channel]=1.
