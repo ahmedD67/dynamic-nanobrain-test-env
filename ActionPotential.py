@@ -39,7 +39,7 @@ plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 # This is done by creating a list of the channel names. The names are arbitrary and can be set by the user, such as 'postive', 'negative' or explicit wavelenghts like '870 nm', '700 nm'. Here I chose the colors 'red' and 'blue'.
 
 # %%
-channel_list = ['red', 'blue']
+channel_list = ['blue','red']
 # Automatically generate the object that handles them
 channels = {channel_list[v] : v for v in range(len(channel_list))}
 
@@ -110,7 +110,7 @@ weights['hd0->out'].connect_nodes(0, channels['blue'], channel='blue', weight=0.
 # #### Shell layout
 # This is my current favorite. It is configured to plot the input and output nodes on the outside of the hidden layer circle, in a combined outer concentric circle.
 # %%
-plotter.visualize_network(layers, weights, layout='shell', show_edge_labels=False,shell_order=[1,[2,3],[0,4]])
+plotter.visualize_network(layers, weights, layout='shell', show_edge_labels=False,shell_order=[1,[2,3],[0,4]],exclude_nodes={0: ['I1'], 4: ['O1']},savefig=True)
 
 # %% [markdown]
 # ### 5. Specify the physics of the nodes
@@ -157,7 +157,7 @@ print(f'Imax is found to be {Imax} nA')
 
 # %%
 # Specify an exciting arbitrary pulse train mixing 0.5 and 1 ns pulses
-t_blue = [(5.0,6.0), (8.0,8.5), (9.0,9,5), (10.0,11.0), (20.0,21.0), (30.0,31.0)] # 
+t_blue = [(5.0,6.0), (8.0,8.5), (9.0,9,5), (10.0,11.0), (23.0,24.0), (30.0,31.0)] # 
 #t_blue = [(5.0,6.0), (8.0,8.5), (9.0,9,5), (10.0,11.0)] # 
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
@@ -224,8 +224,8 @@ plotter.plot_nodes(result, nodes, onecolumn=True)
 # Variable G contains a graph object descibing the network
 G = plotter.retrieve_G(layers, weights)
 #plotter.plot_chainlist(result,G,'I1','L0')
-plotter.plot_chainlist(result,G,'I1','K0')
-plotter.plot_chainlist(result,G,'I1','L0')
+plotter.plot_chainlist(result,G,'I0','K0')
+plotter.plot_chainlist(result,G,'I0','L0')
 
 # %% [markdown]
 # Plot specific attributes

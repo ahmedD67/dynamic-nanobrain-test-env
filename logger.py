@@ -11,9 +11,10 @@ import pandas as pd
 
 class Logger :
     
-    def __init__(self,layers,channels) :
+    def __init__(self,layers,channels,feedback=False) :
         self.list_data = []
         # Need to get the node names
+        self.feedback = feedback
         self.column_labels = self.column_names(layers,channels)
         
     def column_names(self, layers, channels) :
@@ -47,6 +48,10 @@ class Logger :
                 # Currents
                 for key in channels :
                     names.append('O'+str(channels[key])+'-Iout-'+key)
+                if self.feedback :
+                    # add some extra columns for the signal fed back in (C)
+                    for key in channels :
+                        names.append('O'+str(channels[key])+'-Iinp-'+key)
                     
             else :
                 print('Unexpected layer_type in logger.column_names')
@@ -87,6 +92,9 @@ class Logger :
                 # Voltages
                 curr=layers[idx].B.diagonal().flatten(order='F').tolist()
                 row += curr 
+                if self.feedback :
+                    curr=layers[idx].C.diagonal().flatten(order='F').tolist()
+                    row += curr
             else :
                 print('Unexpected layer_type in logger.add_tstep')
                 raise RuntimeError

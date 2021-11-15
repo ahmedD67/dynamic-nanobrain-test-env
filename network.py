@@ -48,6 +48,9 @@ class Layer :
         for n in range(self.N) :
             names.append(self.get_node_name(n,layer_idx))
         return names
+    
+    def reset(self) :
+        return None
 
 class HiddenLayer(Layer) :
     
@@ -122,6 +125,11 @@ class HiddenLayer(Layer) :
         B_to_add[1,:] *= 1e-18/self.device.p_dict['Cexc']
         self.B += B_to_add
     
+    def reset(self) :
+        self.reset_B()
+        self.reset_I()
+        self.reset_V()
+    
 # Inherits Layer
 class InputLayer(Layer) :
         
@@ -155,7 +163,8 @@ class InputLayer(Layer) :
         # Create a matrix out of the input currents
         self.C = np.diag(self.get_input_current(t))
     
-    # This class has no B
+    # This class has no B so nothing to reset
+    # TODO: Should probably be in the parent class, check it out
     def reset_B(self) :
         return None
     
@@ -176,6 +185,9 @@ class OutputLayer(Layer) :
     def set_teacher_delay(self,delay) :
         # introduce a class variable to handle time delays
         self.teacher_delay=delay
+        self.reset_teacher_memory()
+        
+    def reset_teacher_memory(self) :
         self.search_teacher=0
         # t and then B11, B12..
         self.teacher_memory=np.zeros((len(self.B.flatten())+1))
@@ -245,6 +257,10 @@ class OutputLayer(Layer) :
     def update_C(self,t) :
         # Create a matrix out of the output currents
         self.C = np.diag(self.get_output_current(t))
+        
+    def reset(self) :
+        self.reset_B()
+        self.reset_teacher_memory()
         
 # Connect layers and create a weight matrix
 def connect_layers(down, up, layers, channels) :
@@ -327,15 +343,15 @@ def connect_layers(down, up, layers, channels) :
         def set_W(self, key, W) :
             self.W[self.channels[key],:,:] = W
             
-        def ask_W(self) :
-            print(f'Set weights by set_W(channel key, array of size M x N \nwith {self.W[0,:,:].shape}')
-            
+        def ask_W(self,silent=False) :
+            if not silent : print(f'Set weights by set_W(channel key, array of size M x N \nwith {self.W[0,:,:].shape}')
+            return self.W[0,:,:].shape
+        
     return Weights(down,up,layers,channels)
     
 def reset(layers) :
     for key in layers :
-        layers[key].reset_B()
-        if layers[key].layer_type == 'hidden' :
-            layers[key].reset_I()
-            layers[key].reset_V()
+        # all layer types have this function
+        layers[key].reset()
+
     

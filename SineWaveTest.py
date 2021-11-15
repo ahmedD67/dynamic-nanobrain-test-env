@@ -198,14 +198,16 @@ plt.rc('font', **font)
 fig, (ax1, ax2) = plt.subplots(2,1,figsize=(nature_double,nature_single),sharex=True)
 
 f_min = abs(s[0])
-plot_f_max = 5 # GHz
+plot_f_max = 10 # GHz
 
 ax1.plot(abs(s),mag_G11_dB)
 ax1.plot([f_min,plot_f_max],[-3,-3],'k--')
 ax1.grid('True')
 ax1.set_xscale('log')
+ax1.set_title('Bode plots for dynamic node')
 #ax1.set_xlabel('Frequency (GHz)')
 ax1.set_ylabel('|G11|/|G11[0]| (dB)')
+ax1.set_ylabel('|H| (dB)')
 ax1.set_xlim(f_min,plot_f_max)
 ax1.set_ylim(-20,2)
 
@@ -216,11 +218,13 @@ ax2.set_xlabel('Frequency (GHz)')
 ax2.set_ylabel('Phase (radians)')
 ax2.set_ylim(-180,10)
 
+figname = 'sine_test_bode'
+
 plt.tight_layout()
 #plt.legend()
-#plt.savefig(figname+'.eps',bbox_inhces='tight')
-#plt.savefig(figname+'.png',dpi=my_dpi)
-#plt.savefig(figname+'.svg')
+plt.savefig(figname+'.eps',bbox_inhces='tight')
+plt.savefig(figname+'.png',dpi=my_dpi)
+plt.savefig(figname+'.svg')
 plt.show()
 
 

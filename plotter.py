@@ -77,7 +77,7 @@ def retrieve_G(layers, weights) :
     
     return G
     
-def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='multipartite', show_edge_labels=True, shell_order=None) :
+def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='multipartite', show_edge_labels=True, shell_order=None, savefig=False) :
     edges = {}
     for key in weights :
         edges[key] = name_edges(weights[key],layers)
@@ -175,6 +175,9 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='
     # There is an interface to graphviz .dot files provided by 
     #nx.drawing.nx_pydot.write_dot(G, 'graph.dot')
     # to generate a png, run dot -Tpng graph.dot > graph.png
+    if savefig :
+        nx.drawing.nx_pydot.write_dot(G, 'network_layout.dot')
+        plt.savefig('network_layout.png',dpi=300)
     
     return G
 
