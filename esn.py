@@ -107,9 +107,6 @@ class EchoStateNetwork :
         # Intralayer connections
         weights['hd0->hd0'] = nw.connect_layers(1, 1, layers, channels)
         weights['hd1->hd1'] = nw.connect_layers(2, 2, layers, channels)
-        # Connections to output
-        weights['hd0->out'] = nw.connect_layers(1, 3, layers, channels)
-        weights['hd1->out'] = nw.connect_layers(2, 3, layers, channels)
         # Connections back into reservoir from output
         weights['out->hd0'] = nw.connect_layers(3, 1, layers, channels)
         weights['out->hd1'] = nw.connect_layers(3, 2, layers, channels)
@@ -201,12 +198,21 @@ class EchoStateNetwork :
         # Set the weights for the blue output
         W_res_out[self.channels['blue']]=W_out[0,:self.N//2]
         self.weights['hd0->out'].set_W('blue', W_res_out)
-        
+        # Update the B value correspondingly, as the are newly connected
+        C = np.einsum('i,j->ij',self.weights['hd0->out'].D,self.layers[1].P)
+        # At this point we normalize with the unity coupling coefficient
+        C *= self.unity_coeff
+        # Add the corresponding currents to Output layer
+        self.layers[3].update_B(self.weights['hd0->out'],C)
+            
         W_inout = np.zeros(self.weights['inp->out'].ask_W(silent=True))
         # Set the weights for the input-output coupling
         W_inout[self.channels['blue']]=W_out[0,self.N//2:] # 3 last elements
         self.weights['inp->out'].set_W('blue', W_inout)
-
+        # Also here we add the currents to B
+        C = self.layers[0].C
+        self.layers[3].update_B(self.weights['inp->out'],C)
+        
         
     def show_network(self,layers, weights, savefig=False) :
         plotter.visualize_network(layers, weights, 
@@ -238,10 +244,10 @@ class EchoStateNetwork :
                                            func_handle=teacher_handle(self.Imax*self.teacher_scaling))
             self.teacher_handle = teacher_handle
             
-    def set_delay(self, delay) :
+    def set_delay(self, delay,nsave=None) :
         # This is the timescale of the system
         self.timescale=delay
-        self.layers[3].set_teacher_delay(self.timescale)
+        self.layers[3].set_teacher_delay(self.timescale,nsave)
         
     def evolve(self,T,reset=True,t0=0.,teacher_forcing=False) : 
         import logger
@@ -250,12 +256,12 @@ class EchoStateNetwork :
         
         # Start time is t
         t=t0
-        # To sample result over a fixed time-step, use savetime
-        savestep = 0.1 # ns
-        savetime = savestep
         # These parameters are used to determine an appropriate time step each update
-        dtmax = 0.1 # ns 
-        dVmax = 0.005 # V
+        dtmax = 0.5 # ns 
+        dVmax = 0.01 # V # I loosen this a little bit now
+        # To sample result over a fixed time-step, use savetime
+        savestep = 0.5 # ns
+        savetime = max(savestep,dtmax)
         
         if reset :
             # option to keep reservoir in its current state
@@ -274,7 +280,7 @@ class EchoStateNetwork :
         
             # update with explicit Euler using dt
             # supplying the unity_coeff here to scale the weights
-            tm.update(dt, t, self.layers, self.weights, self.unity_coeff, teacher_forcing)
+            tm.update(dt, t, self.layers, self.weights, t0, self.unity_coeff, teacher_forcing)
             
             t += dt
             # Log the progress
@@ -313,14 +319,13 @@ class EchoStateNetwork :
         df_interp = interp1d(tcol,df,axis=0)
         return df_interp(tseries)
         
-    def fit(self,T,t0=0.) :
+    def harvest_states(self,T,t0=0.,reset=True) :
         # First we evolve to T in time from optional t0
-        result = self.evolve(T,t0=t0,teacher_forcing=True)
+        result = self.evolve(T,t0=t0,teacher_forcing=True,reset=reset)
         # Now we fit the output weights using ridge regression
         if not self.silent:
-            print("fitting...")
+            print("harvesting states...")
 
-        all_columns = result.columns
         # Secondly, we employ a discrete sampling of the signals
         tseries = np.arange(t0,T,step=self.timescale,dtype=float)
         # States
@@ -333,31 +338,48 @@ class EchoStateNetwork :
 
         # Now we formulate extended states including the input signal
         extended_states = np.hstack((states_series, inputs_series))
-        # we'll disregard the first few states:
-        transient = min(int(tseries.shape[0] / 10), 100)
-        # Solve for W_out:
-        W_out = np.dot(np.linalg.pinv(extended_states[transient:, :]),
-                            teacher_series[transient:, :]).T
-        
-        # Now we need to specify some weights from the input and reservoir unit
-        print('The following weights were found:\n', W_out)
-        # in line with trained W_out
-        self.add_trained_weights(W_out)
         
         print('Voltages at the last point (H,K):\n', self.layers[1].V)
-        print(self.layers[2].V)
-        
+        print(self.layers[2].V)   
         print('Currents out from H:', self.layers[1].P)
         
-        # Generate the prediction for the traning data
-        if not self.silent:
-            print("training error:")
+        
+        return tseries, extended_states, teacher_series
+
+    def fit(self, states, target, beta=100, regularization=True) :
+        # we'll disregard the first few states:
+        transient = min(int(target.shape[0] / 10), 100)
+        
+        if regularization:
+            # Use regularization parameter beta to find output weights
+            Nx = states.shape[1]
+            # Part to invert
+            X = states[transient:].T @ states[transient:] + beta * np.diag([1]*Nx)
+            # Part including the target
+            YX = target[transient:].T @ states[transient:]
+            # Final expression
+            W_out = YX @ np.linalg.inv(X)
+        else :
+            # Solve for W_out using direct pseudoinverse
+            W_out = np.dot(np.linalg.pinv(states[transient:, :]),
+                           target[transient:, :]).T
+        
+   
+        # Now we need to specify some weights from the input and reservoir unit
+        print('The following weights were found:\n', W_out)
         # apply learned weights to the collected states:
-        pred_train = self._unscale_teacher(np.dot(extended_states, 
-                                                           W_out.T))
+        self.add_trained_weights(W_out)
+
+        # Generate the prediction for the traning data
+        pred_train = self._unscale_teacher(np.dot(states, 
+                                                  W_out.T))
+        
+        error = np.sqrt(np.mean((pred_train - target)**2))/self.Imax
+        
         if not self.silent:
-            print(np.sqrt(np.mean((pred_train - teacher_series)**2)))
-        return tseries, pred_train, transient
+            print('Training error:', error)
+            
+        return pred_train, error
         
     def predict(self,t0,T) :
         # Assume here that we continue on from the state of the reservoir
@@ -371,6 +393,7 @@ class EchoStateNetwork :
         tseries = np.arange(t0,T,step=self.timescale,dtype=float)
         # States
         output_series = self.interp_columns(result,tseries,header_exp='O0-Iout-blue')
+        unscaled_output = self._unscale_teacher(output_series)
         
-        return tseries, output_series
+        return tseries, unscaled_output
         

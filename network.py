@@ -171,7 +171,7 @@ class InputLayer(Layer) :
 # Inherits Layer    
 class OutputLayer(Layer) :
     
-    def __init__(self, output_channels, teacher_delay=None) :
+    def __init__(self, output_channels, teacher_delay=None, nsave=800) :
         Layer.__init__(self, len(output_channels), layer_type='output')
         self.channels = output_channels
         self.C = np.zeros((self.N,self.N))
@@ -181,16 +181,19 @@ class OutputLayer(Layer) :
         self.output_func_handles={}
         self.output_func_args={}
         self.teacher_delay=teacher_delay
+        self.nsave=nsave
 
-    def set_teacher_delay(self,delay) :
+    def set_teacher_delay(self,delay,nsave=None) :
         # introduce a class variable to handle time delays
         self.teacher_delay=delay
-        self.reset_teacher_memory()
+        # Give possibility to override nsave here
+        if nsave is not None:
+            self.nsave=nsave
+        self.reset_teacher_memory(self.nsave)
         
-    def reset_teacher_memory(self) :
-        self.search_teacher=0
-        # t and then B11, B12..
-        self.teacher_memory=np.zeros((len(self.B.flatten())+1))
+    def reset_teacher_memory(self,nsave) :
+        # create a np array of fixed size to handle the memory structure
+        self.teacher_memory=np.zeros((nsave,len(self.B.flatten())+1))
     
     def set_output_func(self, channel, func_handle, func_args=None) :
         self.output_func_handles[channel] = func_handle
@@ -223,30 +226,38 @@ class OutputLayer(Layer) :
             self.B = 0
             
     def lin_intp(self,x,f) :
-        # specify interval
+        # specify interval, xs is the endpoints
         x0 = f[0,0]
         x1 = f[1,0]
         p1 = (x-x0)/(x1-x0) # fraction to take of index 1
         p0 = 1-p1 # fraction to take from index 1
+        # Appy these to the deque object
         return p0*f[0]+p1*f[1]
             
-    def update_C_from_B(self,t) :
+    def update_C_from_B(self,t,t0=0) :
         # Here it is possible to add a nonlinear function as well
         # Need to take the delay into account here
         if self.teacher_delay is not None :
-            # First, we need to store B with correct time-stamp
-            self.teacher_memory=np.vstack((self.teacher_memory,np.concatenate((np.array([t]),self.B.flatten()))))
+            # First, we update the memory with correct time-stamp B
+            # Shift memory "upwards"
+            self.teacher_memory[:self.nsave-1]=self.teacher_memory[1:]
+            # Write new value
+            self.teacher_memory[-1]=np.concatenate((np.array([t]),self.B.flatten()))
             # Now we choose the correct memory point to choose from
-            t_find = max(t-self.teacher_delay,0) # starts at 0
-            # Search for point just before t
-            while t_find > self.teacher_memory[self.search_teacher,0] :
-                self.search_teacher += 1
+            t_find = max(t-self.teacher_delay,t0) # starts at t0
+            # Search for point just before t, start from end of the deque
+            idx_t=-1 
+            while t_find < self.teacher_memory[idx_t,0] :
+                idx_t -= 1
             
-            if self.search_teacher > 0 :
+            if t_find > t0 :
+                # Catching an exception here when idx_t=-2
+                end = idx_t+2 if idx_t+2<0 else None
                 teacher_signal = self.lin_intp(t_find,
-                                               self.teacher_memory[self.search_teacher-1:self.search_teacher+1])
+                                               self.teacher_memory[idx_t:end])
             else : 
-                teacher_signal = self.teacher_memory[0]
+                # last entry, think this is ok
+                teacher_signal = self.teacher_memory[idx_t]
             
             B_for_update = teacher_signal[1:].reshape((self.N,self.N))
         else :
@@ -260,7 +271,7 @@ class OutputLayer(Layer) :
         
     def reset(self) :
         self.reset_B()
-        self.reset_teacher_memory()
+        self.reset_teacher_memory(self.nsave)
         
 # Connect layers and create a weight matrix
 def connect_layers(down, up, layers, channels) :

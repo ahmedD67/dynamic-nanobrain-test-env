@@ -31,8 +31,8 @@ import logger
 import esn
 
 
-Nreservoir = 20
-SEED=43
+Nreservoir = 40
+SEED=44
 # Get me a network
 my_esn = esn.EchoStateNetwork(Nreservoir,seed=SEED)
 
@@ -110,13 +110,14 @@ if True :
     
     plt.show
 
-# %% Test the input handles
-
 
 # %% 
-# Here we specify the external signals, bias, input and teacher signal
-my_esn.specify_network(1.0,1.0,0.1,1.0)
+# Specify spectral radius, scaling of input,bias and teacher signal
+my_esn.specify_network(1.0,2.0,0.2,1.0)
+teacher_scaling=1.0
+# Specify device
 my_esn.assign_device(propagator)
+# Specify explicit signals by handle
 my_esn.specify_inputs(input_signal,bias_signal,teacher_signal)
 
 #%% Set the system delay time
@@ -127,27 +128,43 @@ my_esn.set_delay(0.5) # units of ns
 # ### 6. Evolve in time
 # Fit the ESN using teacher forcing for the first part of the time series
 # %%
-Tfit = 400.
-tseries_train, pred_train, transient = my_esn.fit(Tfit)
+Tfit = 100.
+tseries_train, states_train, teacher_train = my_esn.harvest_states(Tfit)
+
+#%% Do the actual fit as a separate step
+pred_train, error = my_esn.fit(states_train, teacher_train,beta=10)
 
 # %%
+# Setup a copy of the teacher signal here
+teacher_handle = teacher_signal(my_esn.Imax*teacher_scaling)
+#teacher_train = teacher_handle(tseries_train)
+
+# Plot training example
 fig, ax = plt.subplots()
 
-ax.plot(tseries_train[transient:],pred_train[transient:])
-ax.plot(tseries[:int(3*Tfit)],frequency_output[:int(3*Tfit)]*450,'--')
+ax.plot(tseries_train[:],pred_train[:])
+ax.plot(tseries_train,teacher_train,'--')
 ax.plot()
+
 plt.show()
 
 # %%
-tseries_test, pred_test = my_esn.predict(Tfit,Tfit+20)
+scl = 2.0
+tseries_test, pred_test = my_esn.predict(Tfit,2.0*Tfit)
+
 
 # %%
+teacher_handle = teacher_signal(my_esn.Imax*teacher_scaling)
+teacher_test = teacher_handle(tseries_test)
+
 fig, ax = plt.subplots()
 ax.plot(tseries_test[:],pred_test[:])
-ax.plot(tseries[int(3*Tfit):int(3*(2*Tfit))],frequency_output[int(3*Tfit):int(3*(Tfit*2))]*450,'--')
+ax.plot(tseries_test,teacher_test,'--')
+
 
 plt.show()
 
-# %%
+# %% Valdidation error 
 
-tseries_test, pred_test = my_esn.predict(Tfit+20,2*Tfit)
+pred_error = np.sqrt(np.mean((pred_train - teacher_test)**2))/my_esn.Imax
+
