@@ -23,7 +23,7 @@ class Logger :
             node_list = layers[idx].get_names(idx)          
             if layers[idx].layer_type == 'input' :
                 for key in channels :
-                    names.append('I'+str(channels[key])+'-Iout-'+key)
+                    names.append('I'+str(channels[key])+'-Pout-'+key)
                 
             elif layers[idx].layer_type == 'hidden' :
                 # Voltages
@@ -47,11 +47,11 @@ class Logger :
             elif layers[idx].layer_type == 'output' :
                 # Currents
                 for key in channels :
-                    names.append('O'+str(channels[key])+'-Iout-'+key)
+                    names.append('O'+str(channels[key])+'-Pout-'+key)
                 if self.feedback :
                     # add some extra columns for the signal fed back in (C)
                     for key in channels :
-                        names.append('O'+str(channels[key])+'-Iinp-'+key)
+                        names.append('O'+str(channels[key])+'-Pinp-'+key)
                     
             else :
                 print('Unexpected layer_type in logger.column_names')

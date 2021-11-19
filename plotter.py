@@ -160,7 +160,7 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='
     nx.draw_networkx_nodes(G, pos, cmap=plt.get_cmap('Blues'), 
                            node_color = values, vmin=0., vmax=1.0,
                            node_size = node_size)
-    nx.draw_networkx_labels(G, pos, font_size=(6+c*6))
+    nx.draw_networkx_labels(G, pos, font_size=(6+c*4))
     nx.draw_networkx_edges(G, pos, edgelist=red_edges, edge_color='r', 
                            arrows=True, arrowsize=20,node_size=node_size)
     nx.draw_networkx_edges(G, pos, edgelist=black_edges, edge_color=edge_colors,
@@ -176,8 +176,10 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='
     #nx.drawing.nx_pydot.write_dot(G, 'graph.dot')
     # to generate a png, run dot -Tpng graph.dot > graph.png
     if savefig :
-        nx.drawing.nx_pydot.write_dot(G, 'network_layout.dot')
+        #nx.drawing.nx_pydot.write_dot(G, 'network_layout.dot')
         plt.savefig('network_layout.png',dpi=300)
+    
+    plt.show()
     
     return G
 
@@ -185,17 +187,211 @@ def simple_paths(G,source, target) :
     paths = nx.all_simple_paths(G,source,target)
     return paths
 
-def save_movie_frame(t, layers, weights, node_size=600) :
-    pass
+def movie_maker(tseries, movie_series, layers, weights, exclude_nodes={}, node_size=600, layout='multipartite', show_edge_labels=True, shell_order=None) :
+    from matplotlib.animation import FuncAnimation
+    # Setup the network plot from the layers and weights
+    edges = {}
+    for key in weights :
+        edges[key] = name_edges(weights[key],layers)
+    
+    nodes = name_nodes(layers)
+    for key in exclude_nodes :
+        for node in exclude_nodes[key] :
+            nodes[key].remove(node)
+        
+    # Construct a graph
+    G = nx.DiGraph()
+    for key in nodes :
+        G.add_nodes_from(nodes[key], subset=key)
+    for edge_set in edges.values() :
+        for key in edge_set :
+            G.add_weighted_edges_from(edge_set[key],color=key)
 
-def visualize_dynamic_result(res, columns) :
+
+    # Small loop here to set the colors
+    val_map = {0: 'tab:blue',
+               1: 'tab:red',
+               2: 'tab:green'}
+    
+    values=[]
+    for node in G.nodes() :
+        if node[0]=='H' :
+            values.append(val_map[0])
+        elif node[0]=='K' :
+            values.append(val_map[1])
+        else :
+            values.append(val_map.get(int(node[1])))
+    
+    edge_labels=dict([((u,v,),f"{d['weight']:.1f}")
+                     for u,v,d in G.edges(data=True)])
+    edge_colors=['tab:'+d['color'] for u,v,d in G.edges(data=True)]
+    # Specified dynamically
+    #edge_weights=[d['weight'] for u,v,d in G.edges(data=True)]
+       
+    if layout=='multipartite' :
+        pos=nx.multipartite_layout(G)
+    elif layout=='spring' :
+        pos=nx.spring_layout(G)
+    elif layout=='circular' :
+        pos=nx.circular_layout(G)
+    elif layout=='spiral' :
+        pos=nx.spiral_layout(G)
+    elif layout=='kamada_kawai' :
+        pos=nx.kamada_kawai_layout(G)
+    elif layout=='shell' :
+        nlist = []
+        # Combine the output and input layer on the same circle
+        if shell_order is None:
+            # Number of layers
+            P = len(nodes.keys())
+            for key in nodes:
+                if key < P-1 :
+                    nlist.append(nodes[key])
+                else :
+                    nlist[0] += nodes[key]
+            # Reverse list to have input + output as outer layer
+            nlist = nlist[::-1]
+            
+        else :
+            for entry in shell_order :
+                if type(entry) is list:
+                    nlist.append(nodes[entry[0]])
+                    for k in range(1,len(entry)) :
+                        nlist[-1] += nodes[entry[k]]
+                else :
+                    nlist.append(nodes[entry])
+                
+        pos=nx.shell_layout(G,nlist=nlist)
+        
+    else :  
+        print('Sorry, layout not implemented, reverting back to multipartite')
+        pos=nx.multipartite_layout(G)
+        
+    # Try simple scaling
+    c = node_size/600
+
+    # Need a way to scale the alpha of each node depending on its activity
+    # Start by renaming the DataFrame columns for easy access
+    short_names = []
+    for name in movie_series.columns :
+        idx = name.find('-')
+        short_names.append(name[:idx])
+        
+    changes=dict(zip(movie_series.columns,short_names))
+    movie_series.rename(columns=changes,inplace=True)
+    # Check maximum current in movies_series
+    Imax=max(movie_series.max()) # .max() gives a column max
+
+    # Now the alpha can be retrieved as a list
+    idx = tseries.first_valid_index()
+    alpha_P = []
+    for node in G.nodes() :
+        # Calculate transparancy normalized to 1.
+        alpha_P.append(movie_series[node][idx]/Imax)
+        
+
+    # At this point we have G and pos which is what we need NEW:
+    
+    # Create a fixed size figure
+    fig, ax = plt.subplots(figsize=(5,5))
+    
+    def update(idx) :
+        ax.clear()
+        
+        # Update our values of alpha 
+        alpha_P = []
+        for node in G.nodes() :
+            # Calculate transparancy normalized to 1.
+            alpha_P.append(max(movie_series[node][idx],0)/Imax)
+            
+        # Scale also edges by the activity of the sending node
+        edge_weights=[d['weight']*movie_series[u][idx]/Imax for u,v,d in G.edges(data=True)]
+        
+        nx.draw_networkx_edges(G, pos, edgelist=G.edges(), edge_color=edge_colors,
+                               arrows=True, arrowsize=5,node_size=node_size,
+                               width=edge_weights,
+                               connectionstyle='arc3,rad=.2')
+        try :
+            allnodes = nx.draw_networkx_nodes(G, pos, cmap=plt.get_cmap('Blues'), 
+                                              node_color = values, vmin=0., vmax=1.0,
+                                              node_size = node_size, alpha=alpha_P)
+        except ValueError:
+            print(f'Encountered error at t={float(tseries.loc[idx]):.1f} ns, idx={idx}')
+            print('Values are:')
+            print(values)
+            print('Alphas are:')
+            print(alpha_P)
+            
+        allnodes.set_edgecolor("black")
+        nx.draw_networkx_labels(G, pos, font_size=(6+c*2))
+        #nx.draw_networkx_edges(G, pos, edgelist=red_edges, edge_color='r', 
+        #                       arrows=True, arrowsize=20,node_size=node_size)
+
+    
+                              # connectionstyle='arc3,rad=0.2')
+        if show_edge_labels :
+            nx.draw_networkx_edge_labels(G,pos,edge_labels=edge_labels)
+    
+        ax.set_title(f't={float(tseries.loc[idx]):.1f} ns')
+        
+    # Create the animation 
+    ani = FuncAnimation(fig, 
+                        update, 
+                        frames=range(tseries.first_valid_index(),tseries.last_valid_index()),
+                        repeat=False)
+
+    ani.save('movie.mp4')
+    
+    # Show animation in the end    
+    plt.show()
+
+def visualize_scaled_result(res, columns, scaling=None, time_interval=None) :
+    # Make a copy to do nasty things to
+    scaled  = res.copy()
+    if scaling is not None :
+        for k, col in enumerate(columns) :
+            scaled[col] *= scaling[k]
+            
+    # Send back to visualize results
+    visualize_dynamic_result(scaled,columns,time_interval)
+    
+def visualize_dynamic_result(res, columns, time_interval=None) :
+    
+    if time_interval is not None :
+        select_res = res[(res["Time"]>=time_interval[0]) & (res["Time"]<=time_interval[1])]
+    else : 
+        select_res = res
     
     # Pretty generic plot function
-    res.plot(x = 'Time', y = columns,
-             xlabel='Time (ns)', ylabel='Voltage/Current (V)')
+    select_res.plot(x = 'Time', y = columns,
+                    xlabel='Time (ns)', ylabel='Voltage/Current (V/nA)')
         
     plt.gca().grid(True)
-
+    
+def plot_sum_nodes(res, layers, quantity, time_interval=None) :
+    import pandas as pd
+    # First we select the correct time span
+    if time_interval is not None :
+        select_res = res[(res["Time"]>=time_interval[0]) & (res["Time"]<=time_interval[1])]
+    else : 
+        select_res = res
+        
+    # Pick out the time vector
+    time = res['Time']
+    
+    # Construct a df for the wanted values
+    df = pd.DataFrame(columns=layers)
+    for char in layers :
+        regex = char + '.\d?-' + quantity # Example 'H.\d?-Pout'
+        df[char] = select_res.filter(regex=regex).sum(axis=1)
+        
+    df.insert(0,'Time',time)
+    
+    df.plot(x = 'Time', y = layers, xlabel='Time (ns)', ylabel='Voltage/Current (V/nA)',
+            title=f'Summed {quantity} in specified layers')
+    
+    plt.gca().grid(True)
+    
 def subplot_input_output(target, res, channels) :
     # Check if channels key's are colors
     overlap = {name for name in channels if name in mcolors.CSS4_COLORS}
@@ -240,8 +436,8 @@ def subplot_node(target, res, node, plot_all=False) :
     columns = [name for name in res.columns if node in name]
 
     if not plot_all :
-        # Choose voltages and Iexc, Pout, 5 columns
-        columns = columns[0:3] + [columns[4]] + [columns[7]]
+        # Choose voltages and Iinh, Iexc, Pout, 6 columns
+        columns = columns[0:5] + [columns[7]]
 
 
     # Plot voltages
@@ -336,7 +532,8 @@ def plot_chainlist(res, G, source, target, doublewidth=True) :
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
     
-def plot_nodes(res, nodes, plot_all=False, onecolumn=False, doublewidth=True) :
+def plot_nodes(res, nodes, plot_all=False, onecolumn=False, doublewidth=True,
+               time_interval=None) :
     
     N = len(nodes)
     Nrows = max( N // 3 + int(bool(N % 3)), 1 )  # choose three in a row as max
@@ -348,15 +545,21 @@ def plot_nodes(res, nodes, plot_all=False, onecolumn=False, doublewidth=True) :
     else :  
         nature_width = nature_single
         
+    # Select the approperiate time interval
+    if time_interval is not None :
+        select_res = res[(res["Time"]>=time_interval[0]) & (res["Time"]<=time_interval[1])]
+    else : 
+        select_res = res
+        
     fig, axs = plt.subplots(Nrows, Ncols, 
                             figsize=(nature_width*Ncols, nature_single*Nrows))
     
     if N > 1 :
         for k, ax in enumerate(axs.flatten()) :
             if k < N :
-                subplot_node(ax, res, nodes[k], plot_all)
+                subplot_node(ax, select_res, nodes[k], plot_all)
     else:
-        subplot_node(axs, res, nodes[0], plot_all)
+        subplot_node(axs, select_res, nodes[0], plot_all)
         
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()

@@ -80,10 +80,13 @@ class HiddenLayer(Layer) :
 
     def assign_device(self, device) :
         self.device=device
+        self.Bscale=np.diag([1e-18/self.device.p_dict['Cinh'],
+                             1e-18/self.device.p_dict['Cexc'],
+                             0.])
         
     # Provide derivative
     def get_dV(self, t) :     
-        self.dV = self.device.A @ self.V + self.B
+        self.dV = self.device.A @ self.V + self.Bscale @ self.B
         return self.dV
         
     def update_V(self, dt) :
@@ -121,8 +124,8 @@ class HiddenLayer(Layer) :
         B_to_add = E @ BM 
         # Normalize with the correct capactiances and units to get units of V/ns
         # This could be inserted into E, 5 lines above
-        B_to_add[0,:] *= 1e-18/self.device.p_dict['Cinh']
-        B_to_add[1,:] *= 1e-18/self.device.p_dict['Cexc']
+        #B_to_add[0,:] *= 1e-18/self.device.p_dict['Cinh']
+        #B_to_add[1,:] *= 1e-18/self.device.p_dict['Cexc']
         self.B += B_to_add
     
     def reset(self) :

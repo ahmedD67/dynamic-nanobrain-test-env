@@ -31,7 +31,7 @@ class EchoStateNetwork :
         # Not used anymore
         #self.layers, self.weights = self.initialize_nw(self.N,self.sparsity)
         # Show the network when first created
-        self.show_network(self.layers,self.weights,self.savefig)
+        self.show_network(self.savefig)
         
         # If the handles are stored from the start, this can be given as an
         # internal update if layers are redefined.
@@ -113,8 +113,8 @@ class EchoStateNetwork :
         
         # Initiate the weights randomly
         rng = np.random.RandomState(self.seed)
-        # Some parameters, fixed for now
-        Win_scale = 1.0
+        # Some parameters, fixed for now, kill off red weights
+        Win_scale = {'blue':1.0,'red':0.0,'green':1}
         Wfb_scale = 1.0
 
         # Input weights to all of the input units
@@ -125,8 +125,8 @@ class EchoStateNetwork :
             k = channels[key]
             W_key = np.zeros_like(W_in)
             W_key[:,k] = W_in[:,k]
-            weights['inp->hd0'].set_W(key,Win_scale*W_key[:N//2]) # first half
-            weights['inp->hd1'].set_W(key,Win_scale*W_key[N//2:]) # second half
+            weights['inp->hd0'].set_W(key,Win_scale[key]*W_key[:N//2]) # first half
+            weights['inp->hd1'].set_W(key,Win_scale[key]*W_key[N//2:]) # second half
         
         # Now initiate reservoir weights
         W_partition = {'hd0->hd0':(0,N//2,0,N//2), # ++
@@ -187,7 +187,7 @@ class EchoStateNetwork :
         
         return layers, weights, channels
         
-    def add_trained_weights(self, W_out) :
+    def add_trained_weights(self, W_out, bias_scaling=None) :
         # First we define the weights to add
         self.weights['hd0->out'] = nw.connect_layers(1, 3, self.layers, self.channels)
         # We don't add the inhibition layer for now
@@ -213,16 +213,26 @@ class EchoStateNetwork :
         C = self.layers[0].C
         self.layers[3].update_B(self.weights['inp->out'],C)
         
+        if bias_scaling is not None :
+            self.weights['inp->hd0'].set_W('green',self.weights['inp->hd0'].W[self.channels['green'],:,:]*bias_scaling)
+            self.weights['inp->hd1'].set_W('green',self.weights['inp->hd1'].W[self.channels['green'],:,:]*bias_scaling)
         
-    def show_network(self,layers, weights, savefig=False) :
-        plotter.visualize_network(layers, weights, 
+        
+    def show_network(self, savefig=False,layout='shell') :
+        plotter.visualize_network(self.layers, self.weights, 
                                   exclude_nodes={3:['O1','O2']},
                                   node_size=100,
-                                  layout='shell', 
+                                  layout=layout, 
                                   show_edge_labels=False,
                                   savefig=savefig)
             
-        
+    def produce_movie(self,tseries,movie_series) :
+        plotter.movie_maker(tseries,movie_series,self.layers, self.weights, 
+                            exclude_nodes={0:['I1','I2'],3:['O1','O2']},
+                            node_size=100,
+                            layout='spring', 
+                            show_edge_labels=False)
+            
     def assign_device(self, device) :
         self.layers[1].assign_device(device)
         self.layers[2].assign_device(device)
@@ -300,7 +310,7 @@ class EchoStateNetwork :
         
         return result
     
-    def interp_columns(self,result,tseries,header_exp=None,columns=None,regex=None) :
+    def interp_columns(self,result,tseries,header_exp=None,columns=None,regex=None,return_df=False) :
         # TODO: Could be tidied up a bit with the regex
         from scipy.interpolate import interp1d 
         # Extract time column
@@ -314,10 +324,26 @@ class EchoStateNetwork :
             df = result[headers]
         elif regex is not None :
             df = result.filter(regex=regex)
+        else :
+            df = result
             
         # Create interpolation function
         df_interp = interp1d(tcol,df,axis=0)
-        return df_interp(tseries)
+        
+        if return_df :
+            import pandas as pd
+            df_new = pd.DataFrame(df_interp(tseries),columns=df.columns)
+            try :
+                # Try to add the time column as well
+                df_new.insert(0,'Time',tseries)
+            except ValueError :
+                # If it is already there we end up here
+                pass
+            
+        else :
+            df_new = df_interp(tseries)
+        
+        return df_new
         
     def harvest_states(self,T,t0=0.,reset=True) :
         # First we evolve to T in time from optional t0
@@ -334,7 +360,7 @@ class EchoStateNetwork :
         inputs_columns = [c for c in result.columns if ('I0' in c) or ('I1' in c) or ('I2' in c)]
         inputs_series = self.interp_columns(result,tseries,columns=inputs_columns)
         # Teacher signal
-        teacher_series = self.interp_columns(result,tseries,header_exp='O0-Iinp-blue')
+        teacher_series = self.interp_columns(result,tseries,header_exp='O0-Pinp-blue')
 
         # Now we formulate extended states including the input signal
         extended_states = np.hstack((states_series, inputs_series))
@@ -368,7 +394,10 @@ class EchoStateNetwork :
         # Now we need to specify some weights from the input and reservoir unit
         print('The following weights were found:\n', W_out)
         # apply learned weights to the collected states:
-        self.add_trained_weights(W_out)
+        if self.bias_scaling == 0. :
+            self.add_trained_weights(W_out,0)
+        else :
+            self.add_trained_weights(W_out)
 
         # Generate the prediction for the traning data
         pred_train = self._unscale_teacher(np.dot(states, 
@@ -381,7 +410,7 @@ class EchoStateNetwork :
             
         return pred_train, error
         
-    def predict(self,t0,T) :
+    def predict(self,t0,T,output_all=False) :
         # Assume here that we continue on from the state of the reservoir
         if not self.silent:
             print("predicting...")
@@ -392,8 +421,13 @@ class EchoStateNetwork :
         # Secondly, we employ a discrete sampling of the signals
         tseries = np.arange(t0,T,step=self.timescale,dtype=float)
         # States
-        output_series = self.interp_columns(result,tseries,header_exp='O0-Iout-blue')
+        output_series = self.interp_columns(result,tseries,header_exp='O0-Pout-blue')
+        movie_series = self.interp_columns(result,tseries,regex='Pout',return_df=True)
         unscaled_output = self._unscale_teacher(output_series)
+        plot_series = self.interp_columns(result,tseries,return_df=True)
         
-        return tseries, unscaled_output
+        if output_all :
+            return tseries, unscaled_output, movie_series, plot_series
+        else :
+            return tseries, unscaled_output, movie_series
         

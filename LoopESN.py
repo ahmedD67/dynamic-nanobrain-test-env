@@ -22,10 +22,11 @@ import matplotlib.pyplot as plt
 # modules specific to this project
 import physics
 import esn
+import plotter
 
 
 Nreservoir = 40
-SEED=49
+SEED=47
 # Get me a network
 my_esn = esn.EchoStateNetwork(Nreservoir,seed=SEED,sparsity=0.75)
 
@@ -160,11 +161,11 @@ for k in range(len(teacher_scaling)) :
 
 # Reiterate these constants
 teacher_scaling=1.0
-beta = 1e6 # regularization
+beta = 1e2 # regularization
 
 # Training paraemters
 Tfit = 600. # spend two thirds on training
-scl = 1.5
+scl = 2.0
 
 # train and test a network
 my_esn.specify_network(0.6,
@@ -187,8 +188,11 @@ pred_train, train_error = my_esn.fit(states_train, teacher_train,beta=beta)
 # Test trained network by running scl times Tfit
 scl = 2.0
 #my_esn.set_delay(0.5) # units of ns
-tseries_test, pred_test = my_esn.predict(Tfit,scl*Tfit)
+# %%
+# TODO: Check so that this really outputs a DataFrame
+tseries_test, pred_test, movie_series, plot_series = my_esn.predict(Tfit,scl*Tfit,output_all=True)
 # Generate the target signal
+teacher_handle = teacher_signal(my_esn.Imax*teacher_scaling)
 teacher_test = teacher_handle(tseries_test)
 pred_error = np.sqrt(np.mean((pred_test - teacher_test)**2))/my_esn.Imax
                 
@@ -205,6 +209,47 @@ ax.plot(tseries_test,teacher_test,'--')
 
 
 plt.show()
+
+# %%
+
+# At this point, we send all info to the movie_maker to construct our movie of
+# Copy DataFrame
+movie_copy = movie_series.copy()
+plot_copy = plot_series.copy()
+
+time_interval=(750,870)
+
+#select_result = plot_copy[(plot_copy["Time"]>=time_interval[0]) & (plot_copy["Time"]<=time_interval[1])]
+
+plotter.plot_nodes(plot_copy,['H2','H3','H5'],onecolumn=True,time_interval=time_interval)
+plotter.plot_nodes(plot_copy,['K0','K1','K3','K4'],onecolumn=True,time_interval=time_interval)
+
+plotter.visualize_scaled_result(plot_copy,['H3-Iinh','H3-Iexc'],scaling=[-2,1],time_interval=time_interval)
+
+# %%
+
+plotter.plot_sum_nodes(plot_copy,['I','H','K','O'],'Pout',time_interval=time_interval)
+
+
+# %%
+
+# time frame to use
+tstart = 750
+tend = 870
+idx_start = np.nonzero(tseries_test>tstart)[0][0]-1 # include also the start
+idx_end = np.nonzero(tseries_test>tend)[0][0]
+movie_selection = movie_copy.iloc[idx_start:idx_end]
+
+# get the time data also as a DataFrame
+import pandas as pd
+tseries_selection=pd.DataFrame(tseries_test,columns=['Time']).iloc[idx_start:idx_end]
+
+# what's going on. 
+my_esn.produce_movie(tseries_selection,movie_selection)
+
+# %%
+
+my_esn.show_network(layout='spring')
 
 # %% Need a spectrogram to visualize the frequency of the signal
 def draw_spectogram(data):
