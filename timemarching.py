@@ -59,7 +59,7 @@ def evolve(t, layers, dVmax, dtmax) :
     
     return dt
             
-def update(dt, t, layers, weights, t0=0.,unity_coeff=1.0, teacher_forcing=False) :   
+def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False) :   
     # Time updating sequence
     # Update first all voltages V and reset currents in matrices B
     for layer in layers.values() :

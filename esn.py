@@ -290,7 +290,7 @@ class EchoStateNetwork :
         
             # update with explicit Euler using dt
             # supplying the unity_coeff here to scale the weights
-            tm.update(dt, t, self.layers, self.weights, t0, self.unity_coeff, teacher_forcing)
+            tm.update(dt, t, self.layers, self.weights, self.unity_coeff, t0, teacher_forcing)
             
             t += dt
             # Log the progress
