@@ -218,16 +218,16 @@ class EchoStateNetwork :
             self.weights['inp->hd1'].set_W('green',self.weights['inp->hd1'].W[self.channels['green'],:,:]*bias_scaling)
         
         
-    def show_network(self, savefig=False,layout='shell') :
+    def show_network(self, savefig=False,layout='spring') :
         plotter.visualize_network(self.layers, self.weights, 
-                                  exclude_nodes={3:['O1','O2']},
+                                  exclude_nodes={0:['I1','I2'],3:['O1','O2']},
                                   node_size=100,
                                   layout=layout, 
                                   show_edge_labels=False,
                                   savefig=savefig)
             
-    def produce_movie(self,tseries,movie_series) :
-        plotter.movie_maker(tseries,movie_series,self.layers, self.weights, 
+    def produce_movie(self,movie_series) :
+        plotter.movie_maker(movie_series,self.layers, self.weights, 
                             exclude_nodes={0:['I1','I2'],3:['O1','O2']},
                             node_size=100,
                             layout='spring', 

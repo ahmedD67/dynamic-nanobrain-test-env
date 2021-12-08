@@ -31,6 +31,9 @@ SEED=47
 my_esn = esn.EchoStateNetwork(Nreservoir,seed=SEED,sparsity=0.75)
 
 # %%
+
+my_esn.show_network(savefig=True)
+# %%
 # Specify a standard device for the hidden layers
 propagator = physics.Device('device_parameters.txt')
 my_esn.assign_device(propagator)
@@ -189,7 +192,6 @@ pred_train, train_error = my_esn.fit(states_train, teacher_train,beta=beta)
 scl = 2.0
 #my_esn.set_delay(0.5) # units of ns
 # %%
-# TODO: Check so that this really outputs a DataFrame
 tseries_test, pred_test, movie_series, plot_series = my_esn.predict(Tfit,scl*Tfit,output_all=True)
 # Generate the target signal
 teacher_handle = teacher_signal(my_esn.Imax*teacher_scaling)
@@ -239,13 +241,8 @@ tend = 870
 idx_start = np.nonzero(tseries_test>tstart)[0][0]-1 # include also the start
 idx_end = np.nonzero(tseries_test>tend)[0][0]
 movie_selection = movie_copy.iloc[idx_start:idx_end]
-
-# get the time data also as a DataFrame
-import pandas as pd
-tseries_selection=pd.DataFrame(tseries_test,columns=['Time']).iloc[idx_start:idx_end]
-
-# what's going on. 
-my_esn.produce_movie(tseries_selection,movie_selection)
+                                  
+my_esn.produce_movie(movie_selection)
 
 # %%
 

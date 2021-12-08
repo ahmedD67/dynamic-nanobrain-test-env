@@ -103,7 +103,7 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='
     values = [val_map.get(node[0], 0.45) for node in G.nodes()]
     edge_labels=dict([((u,v,),f"{d['weight']:.1f}")
                      for u,v,d in G.edges(data=True)])
-    edge_colors=[d['color'] for u,v,d in G.edges(data=True)]
+    edge_colors=['tab:'+d['color'] for u,v,d in G.edges(data=True)]
     edge_weights=[d['weight'] for u,v,d in G.edges(data=True)]
     
     # Try new way of constructing this
@@ -118,7 +118,7 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='
     if layout=='multipartite' :
         pos=nx.multipartite_layout(G)
     elif layout=='spring' :
-        pos=nx.spring_layout(G)
+        pos=nx.spring_layout(G, iterations=500, threshold=1e-5)
     elif layout=='circular' :
         pos=nx.circular_layout(G)
     elif layout=='spiral' :
@@ -160,11 +160,11 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='
     nx.draw_networkx_nodes(G, pos, cmap=plt.get_cmap('Blues'), 
                            node_color = values, vmin=0., vmax=1.0,
                            node_size = node_size)
-    nx.draw_networkx_labels(G, pos, font_size=(6+c*4))
+    nx.draw_networkx_labels(G, pos, font_size=(6+c*2))
     nx.draw_networkx_edges(G, pos, edgelist=red_edges, edge_color='r', 
-                           arrows=True, arrowsize=20,node_size=node_size)
+                           arrows=True, arrowsize=5,node_size=node_size)
     nx.draw_networkx_edges(G, pos, edgelist=black_edges, edge_color=edge_colors,
-                           arrows=True, arrowsize=20,node_size=node_size,
+                           arrows=True, arrowsize=5,node_size=node_size,
                            width=edge_weights,
                            connectionstyle='arc3,rad=.2')
 
@@ -187,7 +187,7 @@ def simple_paths(G,source, target) :
     paths = nx.all_simple_paths(G,source,target)
     return paths
 
-def movie_maker(tseries, movie_series, layers, weights, exclude_nodes={}, node_size=600, layout='multipartite', show_edge_labels=True, shell_order=None) :
+def movie_maker(movie_series, layers, weights, exclude_nodes={}, node_size=600, layout='multipartite', show_edge_labels=True, shell_order=None) :
     from matplotlib.animation import FuncAnimation
     # Setup the network plot from the layers and weights
     edges = {}
@@ -275,6 +275,7 @@ def movie_maker(tseries, movie_series, layers, weights, exclude_nodes={}, node_s
     short_names = []
     for name in movie_series.columns :
         idx = name.find('-')
+        if idx == -1 : idx = None
         short_names.append(name[:idx])
         
     changes=dict(zip(movie_series.columns,short_names))
@@ -283,6 +284,7 @@ def movie_maker(tseries, movie_series, layers, weights, exclude_nodes={}, node_s
     Imax=max(movie_series.max()) # .max() gives a column max
 
     # Now the alpha can be retrieved as a list
+    tseries = movie_series['Time'] # easier to call
     idx = tseries.first_valid_index()
     alpha_P = []
     for node in G.nodes() :
@@ -293,11 +295,28 @@ def movie_maker(tseries, movie_series, layers, weights, exclude_nodes={}, node_s
     # At this point we have G and pos which is what we need NEW:
     
     # Create a fixed size figure
-    fig, ax = plt.subplots(figsize=(5,5))
+    # fig, ax = plt.subplots(figsize=(5,5))
+    fig = plt.figure(figsize=(5,7))
+    ax1 = plt.subplot(411)
+    ax2 = plt.subplot(4,1,(2,4),aspect=1.)
     
-    def update(idx) :
-        ax.clear()
+    def init() :
+        movie_series.plot(x = 'Time', y = 'O0',ax=ax1)
+        ax1.set_xlabel('Time (ns)')
+        ax1.set_ylabel('O0-Pout (nA)')
         
+    def update(idx) :
+        ax2.clear()
+        try :
+            ax1.lines[1].remove()
+        except :
+            pass
+        
+        # Draw a dot to mark our point
+        t = tseries.loc[idx]
+        Pout = movie_series['O0'].loc[idx]
+        ax1.plot(t,Pout,'ro',ms=5.)
+                
         # Update our values of alpha 
         alpha_P = []
         for node in G.nodes() :
@@ -332,13 +351,14 @@ def movie_maker(tseries, movie_series, layers, weights, exclude_nodes={}, node_s
         if show_edge_labels :
             nx.draw_networkx_edge_labels(G,pos,edge_labels=edge_labels)
     
-        ax.set_title(f't={float(tseries.loc[idx]):.1f} ns')
+        ax1.set_title(f't={float(tseries.loc[idx]):.1f} ns')
         
     # Create the animation 
     ani = FuncAnimation(fig, 
                         update, 
                         frames=range(tseries.first_valid_index(),tseries.last_valid_index()),
-                        repeat=False)
+                        repeat=False,
+                        init_func=init)
 
     ani.save('movie.mp4')
     
