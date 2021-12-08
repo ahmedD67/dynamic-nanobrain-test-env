@@ -180,7 +180,7 @@ class HiddenLayer(Layer) :
 # Inherits Layer
 class InputLayer(Layer) :
         
-    def __init__(self, input_channels):
+    def __init__(self, input_channels, node_structure=None):
         """
         Constructor for an input layer. 
 
@@ -188,16 +188,25 @@ class InputLayer(Layer) :
         ----------
         input_channels : dict
             Example {'blue':0, 'red':1}.
+        node_structure : tuple
+            If more than 1 node in each layer, give (N1,N2,...)
 
         Returns
         -------
         None.
 
         """
-        Layer.__init__(self, len(input_channels), layer_type='input')
+        if node_structure is not None:
+            Layer.__init__(self, sum(node_structure), layer_type='input')
+            self.node_structure = node_structure
+        else :
+            Layer.__init__(self, len(input_channels), layer_type='input')
+            self.node_structure = (1,)*len(input_channels)
         
         self.channels = input_channels
-        self.C = np.zeros((self.N,self.N))
+        self.M = len(input_channels)
+        self.start_idx = [int(sum(self.node_structure[:k])) for k in range(self.M+1)]
+        self.C = np.zeros((self.M,self.N))
         self.I = np.zeros(self.N)
         # These dictonaries hold function handles and arguments
         self.input_func_handles={}
@@ -229,11 +238,12 @@ class InputLayer(Layer) :
         """ Using the specified handles, give the input current at time t."""
         # Work on class object self.I instead of an arbitrary thing
         for key in self.channels :
+            key_slice = slice(self.start_idx[self.channels[key]],self.start_idx[self.channels[key]+1])
             try :
                 if self.input_func_args[key] is not None:
-                    self.I[self.channels[key]] = self.input_func_handles[key](t,*self.input_func_args[key])
+                    self.I[key_slice] = self.input_func_handles[key](t,*self.input_func_args[key])
                 else :
-                    self.I[self.channels[key]] = self.input_func_handles[key](t)
+                    self.I[key_slice] = self.input_func_handles[key](t)
             except :
                 pass
             
@@ -241,10 +251,13 @@ class InputLayer(Layer) :
         
     def update_C(self,t) :
         """ Generate a matrix from the list of input currents."""
-        # Create a matrix out of the input currents
-        self.C = np.diag(self.get_input_current(t))
-    
-    
+        # Get the currents, which can be vector valued
+        currents = self.get_input_current(t)
+        
+        for key in self.channels:
+            key_slice = slice(self.start_idx[self.channels[key]],self.start_idx[self.channels[key]+1])
+            self.C[self.channels[key],key_slice] = currents[key_slice]
+            
 # Inherits Layer    
 class OutputLayer(Layer) :
     

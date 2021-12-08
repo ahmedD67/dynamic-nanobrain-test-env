@@ -51,3 +51,13 @@ axs[3].plot(velocity[:,0],label='vx')
 axs[3].plot(velocity[:,1],label='vy')
 axs[3].legend()
 
+#%% Create navigational circuit
+
+# NavCircuit = class object
+
+# Simulate the outbound path with the object
+# NavCircuit.sim_route(headings, velocity)
+
+# Simulate homing behavior 
+# NavCircuit.sim_homing()
+
