@@ -32,7 +32,7 @@ my_esn = esn.EchoStateNetwork(Nreservoir,seed=SEED,sparsity=0.75)
 
 # %%
 
-my_esn.show_network(savefig=True)
+my_esn.show_network(savefig=True, arrow_size=5,font_scaling=2)
 # %%
 # Specify a standard device for the hidden layers
 propagator = physics.Device('device_parameters.txt')

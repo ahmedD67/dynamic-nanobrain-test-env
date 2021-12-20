@@ -77,7 +77,10 @@ def retrieve_G(layers, weights) :
     
     return G
     
-def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='multipartite', show_edge_labels=True, shell_order=None, savefig=False) :
+def visualize_network(layers, weights, exclude_nodes={}, node_size=600, 
+                      layout='multipartite', show_edge_labels=True, 
+                      shell_order=None, savefig=False, font_scaling=6,
+                      arrow_size=20) :
     edges = {}
     for key in weights :
         edges[key] = name_edges(weights[key],layers)
@@ -160,11 +163,11 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600, layout='
     nx.draw_networkx_nodes(G, pos, cmap=plt.get_cmap('Blues'), 
                            node_color = values, vmin=0., vmax=1.0,
                            node_size = node_size)
-    nx.draw_networkx_labels(G, pos, font_size=(6+c*2))
+    nx.draw_networkx_labels(G, pos, font_size=(6+c*font_scaling))
     nx.draw_networkx_edges(G, pos, edgelist=red_edges, edge_color='r', 
-                           arrows=True, arrowsize=5,node_size=node_size)
+                           arrows=True, arrowsize=arrow_size,node_size=node_size)
     nx.draw_networkx_edges(G, pos, edgelist=black_edges, edge_color=edge_colors,
-                           arrows=True, arrowsize=5,node_size=node_size,
+                           arrows=True, arrowsize=arrow_size,node_size=node_size,
                            width=edge_weights,
                            connectionstyle='arc3,rad=.2')
 
@@ -474,7 +477,7 @@ def subplot_node(target, res, node, plot_all=False) :
     # The plot wrapper actually spits out a new axis that we can use  
     ax2.set_ylabel('Currents (nA)')
     
-    align.yaxes(target,0,ax2,0,0.5)
+    align.yaxes(target,0,ax2,0)
     
     target.set_title('Node '+node)
     
