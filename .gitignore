@@ -1,3 +1,6 @@
+# Ignore complicated mixed-repo file for now
+BeeSimulator.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
