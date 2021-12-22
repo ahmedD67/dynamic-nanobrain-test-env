@@ -11,10 +11,20 @@ For a general introduction about the use of the package and how to create networ
 More advanced use case examples are found under applications. 
 
 To generate the documentation, please use 
+
 $ cd docs
+
 $ sphinx-apidoc -o . ../
+
 $ make html
 
----------------------------
+Application to random recurrent networks
+----------------------------------------
+
+One of the applications to highlight here is the capability of the nodes to act collectively as a recurrent network.
+We have proved that such a network has the so called Echo State Property by training a random network to perform as a frequency generator.
+The files describing the application are found in the folder ''echostatenetwork''.
+
+.. image:: https://github.com/DavidWinge/dynamic-nanobrain/docs/network_layout_cropped.png
 
 Written 2021 by David Winge
