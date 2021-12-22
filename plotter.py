@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 #import pandas as pd
 import networkx as nx
 import matplotlib.colors as mcolors
-from mpl_axes_aligner import align
 
 # Define parameters
 my_dpi = 300
@@ -477,7 +476,13 @@ def subplot_node(target, res, node, plot_all=False) :
     # The plot wrapper actually spits out a new axis that we can use  
     ax2.set_ylabel('Currents (nA)')
     
-    align.yaxes(target,0,ax2,0)
+    # mpl_axes_aligner is an optinal package
+    try :
+        from mpl_axes_aligner import align 
+        align.yaxes(target,0,ax2,0)
+    except:
+        pass
+    
     
     target.set_title('Node '+node)
     
