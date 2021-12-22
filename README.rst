@@ -25,6 +25,6 @@ One of the applications to highlight here is the capability of the nodes to act 
 We have proved that such a network has the so called Echo State Property by training a random network to perform as a frequency generator.
 The files describing the application are found in the folder ''echostatenetwork''.
 
-.. image:: https://github.com/DavidWinge/dynamic-nanobrain/docs/network_layout_cropped.png
+.. image:: https://github.com/DavidWinge/dynamic-nanobrain/blob/d45c986ec0b8f17ab9e39c22310e9f8e7c0ee71f/docs/network_layout_cropped.png
 
 Written 2021 by David Winge
