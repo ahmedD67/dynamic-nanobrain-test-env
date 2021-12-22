@@ -21,16 +21,19 @@
 # an output signal is generated.
 
 # %%
-import networkx as nx
+# %matplotlib inline
+# %load_ext autoreload
+# %autoreload 2
+
 import matplotlib.pyplot as plt
 import time
 
-# modules specific to this project
-import network as nw
-import physics
-import timemarching as tm
-import plotter
-import logger
+# load the modules specific to this project
+from context import network as nw
+from context import physics
+from context import timemarching as tm
+from context import plotter
+from context import logger
 
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 
@@ -118,8 +121,8 @@ plotter.visualize_network(layers, weights, layout='shell', show_edge_labels=Fals
 
 # %%
 # Specify different types of devices for the hidden layers
-PtGate = physics.Device('device_parameters_PtGate.txt')
-AuGate = physics.Device('device_parameters.txt')
+PtGate = physics.Device('../parameters/device_parameters_PtGate.txt')
+AuGate = physics.Device('../parameters/device_parameters.txt')
 # Tune the Rstore of the main node
 PtGate.set_parameter('Rstore',5e6)
 print('Rstore for PtGate device:')
@@ -127,7 +130,7 @@ PtGate.print_parameter('Rstore')
 print('Rstore for AuGate device:')
 AuGate.print_parameter('Rstore')
 # 2. Memory (modify the parameters)
-memory = physics.Device('device_parameters_PtGate.txt')
+memory = physics.Device('../parameters/device_parameters_PtGate.txt')
 memory.set_parameter('Rstore',2e7)
 print('Rstore for memory device:')
 memory.print_parameter('Rstore')

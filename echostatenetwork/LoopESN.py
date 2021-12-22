@@ -20,10 +20,9 @@
 
 import matplotlib.pyplot as plt
 # modules specific to this project
-import physics
+from context import physics
+from context import plotter
 import esn
-import plotter
-
 
 Nreservoir = 40
 SEED=47

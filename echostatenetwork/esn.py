@@ -6,8 +6,8 @@ Created on Thu Nov 11 09:10:12 2021
 @author: dwinge
 """
 import numpy as np
-import network as nw
-import plotter
+from context import network as nw
+from context import plotter
 
 class EchoStateNetwork :
     

@@ -23,12 +23,11 @@ import matplotlib.pyplot as plt
 import time
 
 # modules specific to this project
-import network as nw
-import physics
-import timemarching as tm
-import plotter
-import logger
-
+from context import network as nw
+from context import physics
+from context import timemarching as tm
+from context import plotter
+from context import logger
 
 # %% [markdown]
 # ### 1. Define the broadcasting channels of the network

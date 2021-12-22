@@ -536,6 +536,7 @@ def listToString(s) :
     # return string  
     return str1
     
+#TODO: Seems not to be working in Tutorial.py for example
 def plot_chainlist(res, G, source, target, doublewidth=True) :
     paths = list(simple_paths(G, source, target))
     Npaths = len(paths)
