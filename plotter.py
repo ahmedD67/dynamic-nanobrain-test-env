@@ -211,9 +211,14 @@ def movie_maker(movie_series, layers, weights, exclude_nodes={}, node_size=600, 
 
 
     # Small loop here to set the colors
-    val_map = {0: 'tab:blue',
-               1: 'tab:red',
-               2: 'tab:green'}
+    # Fancy colors
+    #val_map = {0: 'tab:blue',
+    #           1: 'tab:red',
+    #           2: 'tab:green'}
+    # RGB colors
+    val_map = {0: 'blue',
+               1: 'red',
+               2: 'green'}
     
     values=[]
     for node in G.nodes() :
@@ -226,7 +231,10 @@ def movie_maker(movie_series, layers, weights, exclude_nodes={}, node_size=600, 
     
     edge_labels=dict([((u,v,),f"{d['weight']:.1f}")
                      for u,v,d in G.edges(data=True)])
-    edge_colors=['tab:'+d['color'] for u,v,d in G.edges(data=True)]
+    # Fancy colors
+    #edge_colors=['tab:'+d['color'] for u,v,d in G.edges(data=True)]
+    # RGB colors
+    edge_colors=[d['color'] for u,v,d in G.edges(data=True)]
     # Specified dynamically
     #edge_weights=[d['weight'] for u,v,d in G.edges(data=True)]
        

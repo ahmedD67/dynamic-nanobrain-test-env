@@ -1,5 +1,5 @@
-dynamic-nanobrain repository
-============================
+Dynamic Nanobrain Emulator
+===========================
 
 Code package to simulate, in time, dynamical networks based on a physical nanowire design.
 A proper description of the physical devices and the model that describes their dynamical response will be published elsewhere.

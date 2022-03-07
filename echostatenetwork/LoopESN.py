@@ -20,6 +20,7 @@
 
 import matplotlib.pyplot as plt
 # modules specific to this project
+#import context
 from context import physics
 from context import plotter
 import esn
@@ -34,7 +35,7 @@ my_esn = esn.EchoStateNetwork(Nreservoir,seed=SEED,sparsity=0.75)
 my_esn.show_network(savefig=True, arrow_size=5,font_scaling=2)
 # %%
 # Specify a standard device for the hidden layers
-propagator = physics.Device('device_parameters.txt')
+propagator = physics.Device('../parameters/device_parameters.txt')
 my_esn.assign_device(propagator)
 
 
@@ -235,7 +236,7 @@ plotter.plot_sum_nodes(plot_copy,['I','H','K','O'],'Pout',time_interval=time_int
 # %%
 
 # time frame to use
-tstart = 750
+tstart = 770
 tend = 870
 idx_start = np.nonzero(tseries_test>tstart)[0][0]-1 # include also the start
 idx_end = np.nonzero(tseries_test>tend)[0][0]
