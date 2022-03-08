@@ -525,7 +525,7 @@ def connect_layers(down, up, layers, channel) :
                     
             print_W(self.channel,self.W)
                       
-        def set_W(self, key, W) :
+        def set_W(self, W) :
             """ Set weight matrix manually."""
             self.W = W
             
