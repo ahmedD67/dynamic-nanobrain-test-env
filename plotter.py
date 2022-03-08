@@ -545,7 +545,7 @@ def listToString(s) :
     return str1
     
 #TODO: Seems not to be working in Tutorial.py for example
-def plot_chainlist(res, G, source, target, doublewidth=True) :
+def plot_chainlist(res, G, source, target, search_string='Pout', doublewidth=True) :
     paths = list(simple_paths(G, source, target))
     Npaths = len(paths)
     Nrows = Npaths // 3 + 1 # choose three in a row as max
@@ -560,11 +560,11 @@ def plot_chainlist(res, G, source, target, doublewidth=True) :
     
     if Npaths > 1 :
         for k, ax in enumerate(axs) :
-            subplot_chain(ax, res, paths[k], 'Iout')
-            ax.set_title('Iout-chain'+listToString(paths[k]))
+            subplot_chain(ax, res, paths[k], search_string)
+            ax.set_title(search_string+'-chain'+listToString(paths[k]))
     else :
-        subplot_chain(axs, res, paths[0], 'Iout')
-        axs.set_title('Iout-chain'+listToString(paths[0]))
+        subplot_chain(axs, res, paths[0], search_string)
+        axs.set_title(search_string+'-chain'+listToString(paths[0]))
         
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()

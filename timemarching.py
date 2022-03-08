@@ -85,8 +85,8 @@ def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False)
         from_idx = w.from_layer
         to_idx = w.to_layer
         if layers[from_idx].layer_type == 'hidden' :
-            # Inner matrix product with currents from D
-            C = np.einsum('i,j->ij',w.D,layers[from_idx].P)
+            # The values are basically the output signal
+            C = np.copy(layers[from_idx].P)
             # At this point we normalize with the unity coupling coefficient
             C *= unity_coeff
         else :

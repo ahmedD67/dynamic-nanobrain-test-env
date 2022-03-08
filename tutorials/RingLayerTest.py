@@ -47,10 +47,10 @@ channels = {channel_list[v] : v for v in range(len(channel_list))}
 # Create layers ordered from 0 to P organized in a dictionary
 layers = {} 
 Nring=5
-# An input layer automatically creates on node for each channel that we define
-layers[0] = nw.InputLayer(input_channels=channels)
+# An input layer for the incoming signal
+layers[0] = nw.InputLayer(N=1)
 layers[1] = nw.HiddenLayer(N=Nring, output_channel='blue',excitation_channel='blue',inhibition_channel='red')
-layers[2] = nw.OutputLayer(output_channels=channels) # similar to input layer
+layers[2] = nw.OutputLayer(N=1) # similar to input layer
 
 # %% [markdown]
 # ### 3. Define existing connections between layers
@@ -62,10 +62,10 @@ layers[2] = nw.OutputLayer(output_channels=channels) # similar to input layer
 # Define the overall connectivity
 weights = {}
 # The syntax is connect_layers(from_layer, to_layer, layers, channels)
-weights['inp->hd0'] = nw.connect_layers(0, 1, layers, channels)
-weights['hd0->out'] = nw.connect_layers(1, 2, layers, channels)
+weights['inp->hd0'] = nw.connect_layers(0, 1, layers, channel='blue')
+weights['hd0->out'] = nw.connect_layers(1, 2, layers, channel='blue')
 # Recurrent layer for the ring
-weights['hd0->hd0'] = nw.connect_layers(1, 1, layers, channels)
+weights['hd0->hd0'] = nw.connect_layers(1, 1, layers, channel='blue')
 
 # Define the specific node-to-node connections in the weight matrices
 ring_weight = 1.1 
@@ -74,17 +74,17 @@ ring_weight = 1.1
 # Draw a ring network with Nring nodes (Nring defined above)
 
 # Input to first ring layer node
-weights['inp->hd0'].connect_nodes(channels['blue'] ,0, channel='blue', weight=1.0) # channels['blue']=1
+weights['inp->hd0'].connect_nodes(0, 0, weight=1.0) # channels['blue']=1
 
 for k in range(0,Nring) :
     # Intra-ring connections 
     if k<Nring-1 :
-        weights['hd0->hd0'].connect_nodes(k ,k+1, channel='blue', weight=ring_weight) 
+        weights['hd0->hd0'].connect_nodes(k ,k+1, weight=ring_weight) 
     # Add damping connection
     #weights['inp->hd0'].connect_nodes(channels['red'] ,k, channel='red', weight=1.0)
     
 # Connect to output
-weights['hd0->out'].connect_nodes(Nring-1, channels['blue'], channel='blue', weight=0.9)
+weights['hd0->out'].connect_nodes(Nring-1, 0, weight=0.9)
 
 
 # %% [markdown]
@@ -121,16 +121,9 @@ print(f'Imax is found to be {Imax} nA')
 # %%
 # Specify an exciting current square pulse and an inhibition square pulse
 t_blue = [(3.0,4.0)] # 
-I_blue = 2.3 # nA
-# and inhibition from the other one
-#t_red = [(0.7,0.78)] # a 80 ps pulse at 0.7 ns 
-
-# Constant inhibition to stabilize circuit
-#I_red = 0.1863 # nA
-I_red = 0.0
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
-layers[0].set_input_func(channel='blue',func_handle=physics.square_pulse, func_args=(t_blue, 5*Imax))
+layers[0].set_input_vector_func(func_handle=physics.square_pulse, func_args=(t_blue, 5*Imax))
 #layers[0].set_input_func(channel='red', func_handle=physics.constant, func_args=I_red)
 
 # %% [markdown]
@@ -193,7 +186,7 @@ plotter.plot_nodes(result, nodes)
 # %%
 # Variable G contains a graph object descibing the network
 G = plotter.retrieve_G(layers, weights)
-plotter.plot_chainlist(result,G,'I1','O1')
+plotter.plot_chainlist(result,G,'I0','O0')
 
 # %% [markdown]
 # Plot specific attributes
@@ -207,9 +200,6 @@ plotter.plot_attributes(result, attr_list)
 
 # %%
 print(result.columns)
-
-# %%
-plotter.visualize_dynamic_result(result, ['I1-Pout-blue','I0-Pout-red'])
 
 # %%
 plotter.visualize_dynamic_result(result, ['H0-ISD','H1-ISD','H2-ISD'])

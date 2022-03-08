@@ -54,13 +54,14 @@ channels = {channel_list[v] : v for v in range(len(channel_list))}
 # Create layers ordered from 0 to P organized in a dictionary
 layers = {} 
 # An input layer automatically creates on node for each channel that we define
-layers[0] = nw.InputLayer(input_channels=channels)
+layers[0] = nw.InputLayer(N=1)
 # Forward signal layer
 layers[1] = nw.HiddenLayer(N=1, output_channel='blue',excitation_channel='blue',inhibition_channel='red')
 # Inhibiting memory layer
 layers[2] = nw.HiddenLayer(N=1, output_channel='red' ,excitation_channel='blue',inhibition_channel='red')
+# Self-enforcing hidden layer
 layers[3] = nw.HiddenLayer(N=1, output_channel='blue',excitation_channel='blue',inhibition_channel='red')
-layers[4] = nw.OutputLayer(output_channels=channels) # similar to input layer
+layers[4] = nw.OutputLayer(N=1) # similar to input layer
 
 # %% [markdown]
 # ### 3. Define existing connections between layers
@@ -72,32 +73,32 @@ layers[4] = nw.OutputLayer(output_channels=channels) # similar to input layer
 # Define the overall connectivity
 weights = {}
 # The syntax is connect_layers(from_layer, to_layer, layers, channels)
-weights['inp->hd0'] = nw.connect_layers(0, 1, layers, channels)
-weights['hd0->hd1'] = nw.connect_layers(1, 2, layers, channels)
-weights['hd0->out'] = nw.connect_layers(1, 4, layers, channels)
+weights['inp->hd0'] = nw.connect_layers(0, 1, layers, channel='blue')
+weights['hd0->hd1'] = nw.connect_layers(1, 2, layers, channel='blue')
+weights['hd0->out'] = nw.connect_layers(1, 4, layers, channel='blue')
 # Backwards connection from the memory
-weights['hd1->hd0'] = nw.connect_layers(2, 1, layers, channels)
+weights['hd1->hd0'] = nw.connect_layers(2, 1, layers, channel='red')
 # Loop connection with the third hidden layer
-weights['hd0->hd2'] = nw.connect_layers(1, 3, layers, channels)
+weights['hd0->hd2'] = nw.connect_layers(1, 3, layers, channel='blue')
 # Backwards connection from third layer
-weights['hd2->hd0'] = nw.connect_layers(3, 1, layers, channels)
+weights['hd2->hd0'] = nw.connect_layers(3, 1, layers, channel='blue')
 
 # Define the specific node-to-node connections in the weight matrices
 self_inhib = 0.65
 self_excite = 2.0
 # The syntax is connect_nodes(from_node, to_node, channel=label, weight=value in weight matrix)
 # Input to first ring layer node
-weights['inp->hd0'].connect_nodes(channels['blue'] ,0, channel='blue', weight=1.0) # channels['blue']=1
+weights['inp->hd0'].connect_nodes(0, 0, weight=1.0) # channels['blue']=1
 #weights['inp->hd0'].connect_nodes(channels['red'] ,0, channel='red', weight=1.0) # channels['blue']=1
 # Hidden layer connections
-weights['hd0->hd1'].connect_nodes(0 ,0 , channel='blue', weight=self_inhib) 
+weights['hd0->hd1'].connect_nodes(0 ,0 , weight=self_inhib) 
 # Loop connections
-weights['hd0->hd2'].connect_nodes(0 ,0 , channel='blue', weight=self_excite)
-weights['hd2->hd0'].connect_nodes(0 ,0 , channel='blue', weight=self_excite)
+weights['hd0->hd2'].connect_nodes(0 ,0 , weight=self_excite)
+weights['hd2->hd0'].connect_nodes(0 ,0 , weight=self_excite)
 # Add damping connection
-weights['hd1->hd0'].connect_nodes(0 ,0 , channel='red', weight=self_inhib)    
+weights['hd1->hd0'].connect_nodes(0 ,0 , weight=self_inhib)    
 # Connect to output
-weights['hd0->out'].connect_nodes(0, channels['blue'], channel='blue', weight=0.9)
+weights['hd0->out'].connect_nodes(0, 0, weight=0.9)
 
 # %% [markdown]
 # ### 4. Visualize the network 
@@ -113,7 +114,7 @@ weights['hd0->out'].connect_nodes(0, channels['blue'], channel='blue', weight=0.
 # #### Shell layout
 # This is my current favorite. It is configured to plot the input and output nodes on the outside of the hidden layer circle, in a combined outer concentric circle.
 # %%
-plotter.visualize_network(layers, weights, layout='shell', show_edge_labels=False,shell_order=[1,[2,3],[0,4]],exclude_nodes={0: ['I1'], 4: ['O1']},savefig=True)
+plotter.visualize_network(layers, weights, layout='shell', show_edge_labels=False,shell_order=[1,[2,3],[0,4]],savefig=True)
 
 # %% [markdown]
 # ### 5. Specify the physics of the nodes
@@ -164,7 +165,7 @@ t_blue = [(5.0,6.0), (8.0,8.5), (9.0,9,5), (10.0,11.0), (23.0,24.0), (30.0,31.0)
 #t_blue = [(5.0,6.0), (8.0,8.5), (9.0,9,5), (10.0,11.0)] # 
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
-layers[0].set_input_func(channel='blue',func_handle=physics.square_pulse, func_args=(t_blue, 3.0*Imax))
+layers[0].set_input_vector_func(func_handle=physics.square_pulse, func_args=(t_blue, 3.0*Imax))
 # Use the costant function to specify the inhibition from I0 to H0
 #layers[0].set_input_func(channel='red', func_handle=physics.constant, func_args=(I_red,))
 

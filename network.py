@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Jun  3 14:08:46 2021
+Major revision of the matrix algrebra on March 8 2022.
 
 Notation:
     Capital letters A,B,C... denote matrices 
@@ -10,12 +11,15 @@ Notation:
     Internal voltage variables sets V as 3xN with number of nodes N.
     Internal dynamics governed by A of 3x3 so dV/dt = A @ V
     Input curents supplied as B = 3xN from B = WC where C are output currents
-    from connecting nodes and W are weights
-    We use dim W = M x N x P, for mapping from P nodes onto N nodes with M channels
-    with C as M x P with the rule to leave the channel index to the left.
-    This way we can do tensor updates with 
-    B(ij) = sum(k) W (ijk) C (ik) 
-    using the numpy routine einsum
+    from connecting nodes and W are weights of dim W = N x P
+    for mapping from P nodes onto N nodes. 
+    with C having dimensions of simply dim P.
+    This way we can do all matrix multiplications by for examle
+    B = W @ C which equals B(i) = sum(j) W(ij)C(j) 
+    
+    Each W is contained in a class
+    object that keeps track of the communication channel (e.g. wavelength)
+    and the connecting layers.
 
 @author: dwinge
 """
@@ -31,13 +35,18 @@ class Layer :
         self.N = N
         self.layer_type = layer_type
         
+    # TODO: This does not work perfectly for 2 input layers (first hidden layer 'K')
     def get_node_name(self,node_idx,layer_idx=1) :
         if self.layer_type=='hidden' :
             # Name hidden layers using sequence (defaults to 'H')
             letters = 'HKLMN'
             letter = letters[layer_idx-1]
+        elif self.layer_type=='input' :
+            # Name input layers using sequence (defaults to 'I')
+            letters = 'IJ'
+            letter = letters[layer_idx]
         else :
-            # if not hidden layer, name either 'I' or 'O'
+            # if not hidden or input layer
             letter = self.layer_type[0].upper()
         idx = str(node_idx)
         return letter+idx
@@ -88,6 +97,7 @@ class HiddenLayer(Layer) :
         # These can be multiple, care taken in the constructing of weights
         self.inh_channel = inhibition_channel
         self.exc_channel = excitation_channel
+        self.channel_map = {inhibition_channel:0, excitation_channel:1}
 
         # Set up internal variables
         self.V = np.zeros((NV,self.N))
@@ -137,7 +147,7 @@ class HiddenLayer(Layer) :
         self.P = self.I*self.device.eta_ABC(self.I)
     
     def reset_B(self) :
-        """ Set elements of matrix B ot 0"""
+        """ Set elements of matrix B to 0"""
         self.B[:,:] = 0
     
     def reset_I(self):
@@ -164,12 +174,19 @@ class HiddenLayer(Layer) :
         -------
         None.
 
-        """
-        E = weights.E
-        W = weights.W
-        BM = np.einsum('ijk,ik->ij',W,C)
-        # B is scaled at a later point in get_dV
-        self.B += E @ BM 
+        """        
+        if weights.channel==self.inh_channel :
+            # Make sure we get the correct sign
+            self.B[self.channel_map[weights.channel]] -= weights.W @ C
+        else :
+            self.B[self.channel_map[weights.channel]] += weights.W @ C
+                
+        
+        #E = weights.E
+        #W = weights.W
+        #BM = np.einsum('ijk,ik->ij',W,C)
+        ## B is scaled at a later point in get_dV
+        #self.B += E @ BM 
         
     def reset(self) :
         """ Reset layer values."""
@@ -180,46 +197,38 @@ class HiddenLayer(Layer) :
 # Inherits Layer
 class InputLayer(Layer) :
         
-    def __init__(self, input_channels, node_structure=None):
+    def __init__(self, N):
         """
-        Constructor for an input layer. 
+        Constructor for an input layer. Input data set via set_input_func
+        method.
 
         Parameters
         ----------
-        input_channels : dict
-            Example {'blue':0, 'red':1}.
-        node_structure : tuple
-            If more than 1 node in each layer, give (N1,N2,...)
+        N : int
+            number of nodes of the input layer
 
         Returns
         -------
         None.
 
         """
-        if node_structure is not None:
-            Layer.__init__(self, sum(node_structure), layer_type='input')
-            self.node_structure = node_structure
-        else :
-            Layer.__init__(self, len(input_channels), layer_type='input')
-            self.node_structure = (1,)*len(input_channels)
+        Layer.__init__(self, N, layer_type='input')
         
-        self.channels = input_channels
-        self.M = len(input_channels)
-        self.start_idx = [int(sum(self.node_structure[:k])) for k in range(self.M+1)]
-        self.C = np.zeros((self.M,self.N))
-        self.I = np.zeros(self.N)
+        #self.channels = input_channels
+        #self.M = len(input_channels)
+        #self.start_idx = [int(sum(self.node_structure[:k])) for k in range(self.M+1)]
+        self.C = np.zeros((self.N))
         # These dictonaries hold function handles and arguments
         self.input_func_handles={}
         self.input_func_args={}
 
-    def set_input_func(self, channel, func_handle, func_args=None) :
+    def set_input_vector_func(self, func_handle, func_args=None) :
         """
         Assign a continous function handle to get the input current at time t
+        For an input layer of N>1 this function will have to be vector valued.
 
         Parameters
         ----------
-        channel : str
-            channel label of the input.
         func_handle : handle
             function handle to provide continous signal.
         func_args : tuple, optional
@@ -231,53 +240,55 @@ class InputLayer(Layer) :
         None.
 
         """
-        self.input_func_handles[channel] = func_handle
-        self.input_func_args[channel] = func_args
+        self.input_func_handles['v']= func_handle
+        self.input_func_args['v'] = func_args
         
-    def get_input_current(self, t) :
+    def set_input_func_per_node(self,node,func_handle, func_args=None):
+        
+        self.input_func_handles[node] = func_handle
+        self.input_func_args[node] = func_args
+        
+    def update_C(self, t) :
         """ Using the specified handles, give the input current at time t."""
         # Work on class object self.I instead of an arbitrary thing
-        for key in self.channels :
-            key_slice = slice(self.start_idx[self.channels[key]],self.start_idx[self.channels[key]+1])
+        if 'v' in self.input_func_handles:
+            # In this case, the input values are set by a vector valued function
             try :
-                if self.input_func_args[key] is not None:
-                    self.I[key_slice] = self.input_func_handles[key](t,*self.input_func_args[key])
+                if self.input_func_args['v'] is not None:
+                    self.C = self.input_func_handles['v'](t,*self.input_func_args['v'])
                 else :
-                    self.I[key_slice] = self.input_func_handles[key](t)
+                    self.C = self.input_func_handles['v'](t)
             except :
                 pass
+            # Fix single node issues
+            self.C = np.atleast_1d(self.C)
             
-        return self.I
-        
-    def update_C(self,t) :
-        """ Generate a matrix from the list of input currents."""
-        # Get the currents, which can be vector valued
-        currents = self.get_input_current(t)
-        
-        for key in self.channels:
-            key_slice = slice(self.start_idx[self.channels[key]],self.start_idx[self.channels[key]+1])
-            self.C[self.channels[key],key_slice] = currents[key_slice]
+        else :
+            # Otherwise we loop through the nodes to search for functions
+            for key in self.input_func_handles :
+                try :
+                    if self.input_func_args[key] is not None:
+                        self.C[key] = self.input_func_handles[key](t,*self.input_func_args[key])
+                    else :
+                        self.C[key] = self.input_func_handles[key](t)
+                except :
+                    pass
             
+        return self.C
+    
+    
 # Inherits Layer    
 class OutputLayer(Layer) :
     
-    def __init__(self, output_channels, teacher_delay=None, nsave=800) :
+    def __init__(self, N, teacher_delay=None, nsave=800) :
         """
         Constructor for an input layer. 
-
-        Parameters
-        ----------
-        input_channels : dict
-            Example {'blue':0, 'red':1}.
-
-        Returns
-        -------
-        None.
-
+        
         """
-        Layer.__init__(self, len(output_channels), layer_type='output')
-        self.channels = output_channels
-        self.C = np.zeros((self.N,self.N))
+        Layer.__init__(self, N, layer_type='output')
+        #self.channels = output_channels
+        # TODO: Perhaps self.I is not needed anymore, compare input layer
+        self.C = np.zeros(self.N)
         self.B = np.zeros_like(self.C)
         self.I = np.zeros(self.N)
         # These dictonaries hold function handles and arguments
@@ -314,14 +325,13 @@ class OutputLayer(Layer) :
         # create a np array of fixed size to handle the memory structure
         self.teacher_memory=np.zeros((nsave,len(self.B.flatten())+1))
     
-    def set_output_func(self, channel, func_handle, func_args=None) :
+    def set_output_func(self, func_handle, func_args=None) :
         """
         Assign a continous function handle to get the input current at time t
+        For N>1 this will have to be vector valued. 
 
         Parameters
         ----------
-        channel : str
-            channel label of the input.
         func_handle : handle
             function handle to provide continous signal.
         func_args : tuple, optional
@@ -333,21 +343,20 @@ class OutputLayer(Layer) :
         None.
 
         """
-        self.output_func_handles[channel] = func_handle
-        self.output_func_args[channel] = func_args
+        self.output_func_handles = func_handle
+        self.output_func_args = func_args
         
     def get_output_current(self, t) :
         """ Using the specified handles, give the input current at time t."""
         # Work on class object self.I instead of an arbitrary thing
-        for key in self.channels :
-            try :
-                if self.output_func_args[key] is not None:
-                    self.I[self.channels[key]] = self.output_func_handles[key](t,*self.output_func_args[key])
-                else :
-                    self.I[self.channels[key]] = self.output_func_handles[key](t)
-            except :
-                pass
-            
+        try :
+            if self.output_func_args is not None:
+                self.I = self.output_func_handles(t,*self.output_func_args)
+            else :
+                self.I = self.output_func_handles(t)
+        except :
+            pass
+        
         return self.I
     
     def update_B (self, weights, C) :
@@ -355,13 +364,13 @@ class OutputLayer(Layer) :
         # B is automatically allocated using this procedure
         W = weights.W
         # This automatically yields current in nA
-        self.B += np.einsum('ijk,ik->ij',W,C)
+        self.B += W @ C
     
     def reset_B(self) :
         """ Set the B matrix to 0."""
         # This construction hopefully avoids reallocating memory
         try :
-            self.B[:,:] = 0
+            self.B[:] = 0
         except :
             self.B = 0
             
@@ -377,7 +386,7 @@ class OutputLayer(Layer) :
             
     def update_C_from_B(self,t,t0=0) :
         """
-        Generates the input matrix C from the history of activations of this
+        Generates the output matrix C from the history of activations of this
         layer. Can start at a different t0 than 0.
 
         Parameters
@@ -416,7 +425,7 @@ class OutputLayer(Layer) :
                 # last entry, think this is ok
                 teacher_signal = self.teacher_memory[idx_t]
             
-            B_for_update = teacher_signal[1:].reshape((self.N,self.N))
+            B_for_update = teacher_signal[1:].reshape(self.N)
         else :
             B_for_update = self.B
             
@@ -424,7 +433,7 @@ class OutputLayer(Layer) :
         
     def update_C(self,t) :
         """ Cast the input of the channels as a matrix."""
-        self.C = np.diag(self.get_output_current(t))
+        self.C = self.get_output_current(t)
         
     def reset(self) :
         """ Reset function."""
@@ -432,7 +441,7 @@ class OutputLayer(Layer) :
         self.reset_teacher_memory(self.nsave)
         
 # Connect layers and create a weight matrix
-def connect_layers(down, up, layers, channels) :
+def connect_layers(down, up, layers, channel) :
     """
     Function to connect two layers.
 
@@ -444,8 +453,8 @@ def connect_layers(down, up, layers, channels) :
         to layer index.
     layers : dict
         dictionary containing the layer keys and indicies.
-    channels : TYPE
-        dictionary containing channel keys and indieces.
+    channel : str
+        channel label
 
     Returns
     -------
@@ -455,28 +464,24 @@ def connect_layers(down, up, layers, channels) :
     """
     class Weights :
         
-        def __init__(self, down, up, layers, channels) :
+        # TODO: How about an connect_all keyword here to avoid boilerplate
+        def __init__(self, down, up, layers, channel, connect_all=False) :
             """ Contructor function for the Weight class."""
             # Should not assume correct ordering here
             self.from_layer = down
             self.to_layer = up
-            self.channels = channels
-            self.M = len(self.channels)
+            self.channel = channel
+            #self.M = len(self.channels)
             
             # Initialize matrices
             L0 = layers[down]
             L1 = layers[up]
-            self.W = np.zeros((self.M,L1.N,L0.N))
-            
-            # Check for connections to hidden layers
-            if L1.layer_type == 'hidden' :
-                self.initialize_E(L1)
-            if L0.layer_type == 'hidden' :
-                self.initialize_D(L0)
-                
-            
+            self.W = np.zeros((L1.N,L0.N))
+            if connect_all :
+                self.W[:,:]=1
+                       
         # Define an explicit connection
-        def connect_nodes(self, from_node, to_node, channel, weight=1.0)  : 
+        def connect_nodes(self, from_node, to_node, weight=1.0)  : 
             """
             Node specific method to set node to node weights.
 
@@ -486,8 +491,6 @@ def connect_layers(down, up, layers, channels) :
                 Node index.
             to_node : int
                 Node index.
-            channel : str
-                Label of channel
             weight : float, optional
                 Scaling of the weight. The default is 1.0.
 
@@ -496,98 +499,42 @@ def connect_layers(down, up, layers, channels) :
             None
 
             """
-            self.W[self.channels[channel],to_node,from_node] = weight
-                    
-        def initialize_E(self,L1) :
-            """
-            Setup the matrix E that puts the correct channel values in the C
-            matrix.
-
-            Parameters
-            ----------
-            L1 : layer object
-                Receiving layer class object.
-
-            Returns
-            -------
-            None.
-
-            """
-            # These channels are specific to L1 and could be reversed
-            # compared to other nodes!
-            # Now with support for multiple inhibitory and excitatory channels
-            try :
-                inh_channel = [self.channels[channel] for channel in L1.inh_channel]
-            except : # if inh_channel is not an iterable
-                inh_channel = self.channels[L1.inh_channel] # old version
-            try :
-                exc_channel = [self.channels[channel] for channel in L1.exc_channel]
-            except :
-                exc_channel = self.channels[L1.exc_channel] # old version
-                
-            self.E = np.zeros((NV,self.M))
-            self.E[0,inh_channel]=-1. # inhibiting channel!
-            self.E[1,exc_channel]=1.
-        
-        def initialize_D(self, L0) :
-            """
-            Setup the D matrix to put the output values of a layer into the 
-            proper weight matrix channels.
-
-            Parameters
-            ----------
-            L0 : layer object
-                Sending layer class object.
-
-            Returns
-            -------
-            None.
-
-            """
-            # Construct the proper D for an hidden layer here
-            self.D = np.zeros(self.M, dtype=float)
-            out_channel = L0.out_channel # a key like 'pos'
-            self.D[self.channels[out_channel]] = 1.
-        
+            self.W[to_node,from_node] = weight
+                        
         def get_edges(self) :
             """ Returns a dict of all internode connections. Each channel is 
             represented by a key."""
             edges = {}
-            for key in self.channels:
-                edge_list = []
-                m = self.channels[key]
-                for down in range(len(self.W[0,0,:])) : # column loop (from)
-                    for up in range(len(self.W[0,:,0])) : # row loop (to)
-                        weight = self.W[m,up,down]
-                        if weight > 0. :
-                            edge_list.append((down,up,weight))
-                edges[key] = edge_list
+            edge_list = []
+
+            for down in range(len(self.W[0,:])) : # column loop (from)
+                for up in range(len(self.W[:,0])) : # row loop (to)
+                    weight = self.W[up,down]
+                    if weight > 0. :
+                        edge_list.append((down,up,weight))
+            edges[self.channel] = edge_list
                     
             # Returns a dictionary over the edges of each channel
             return edges
         
         def print_W(self, *args):
-            """ Print the weights. Arguments can be specific channels."""
-            def print_key_W(key,W) :
+            """ Print the weights."""
+            def print_W(key,W) :
                 with np.printoptions(precision=2, suppress=True):
                     print('{0}:\n{1}'.format(key,W))
-            if len(args) > 0:
-                for key in args :        
-                    print_key_W(key,self.W[self.channels[key],:,:])
-            else :
-                for key in channels :
-                    print_key_W(key,self.W[self.channels[key],:,:])
+                    
+            print_W(self.channel,self.W)
                       
-        def set_W(self, key, W) :
-            """ Set weight matrix for a specific channel key."""
-            self.W[self.channels[key],:,:] = W
+        def set_W(self, W) :
+            """ Set weight matrix manually."""
+            self.W = W
             
         def ask_W(self,silent=False) :
-            """ Print the shape of the weight matrix for first channel.""" 
-            if not silent : print(f'Set weights by set_W(channel key, array of size M x N \nwith {self.W[0,:,:].shape}')
-            return self.W[0,:,:].shape
+            """ Print the shape of the weight matrix.""" 
+            if not silent : print(f'Set weights by set_W(array of size M x N \nwith {self.W[0,:,:].shape}')
+            return self.W.shape
         
-    return Weights(down,up,layers,channels)
+    return Weights(down,up,layers,channel)
     
 def reset(layers) :
     """ Resets all layer values to 0."""

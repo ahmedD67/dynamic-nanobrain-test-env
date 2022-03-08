@@ -50,9 +50,9 @@ print(channels)
 # Create layers ordered from 0 to P organized in a dictionary
 layers = {} 
 # An input layer automatically creates on node for each channel that we define
-layers[0] = nw.InputLayer(input_channels=channels)
+layers[0] = nw.InputLayer(N=2)
 layers[1] = nw.HiddenLayer(N=1, output_channel='red',excitation_channel='blue',inhibition_channel='red')
-layers[2] = nw.OutputLayer(output_channels=channels) # for now it can be the same as input
+layers[2] = nw.OutputLayer(N=1) # for now it can be the same as input
 
 # %% [markdown]
 # ### 3. Define existing connections between layers
@@ -64,16 +64,17 @@ layers[2] = nw.OutputLayer(output_channels=channels) # for now it can be the sam
 # Define the overall connectivity
 weights = {}
 # The syntax is connect_layers(from_layer, to_layer, layers, channels)
-weights['inp->hid'] = nw.connect_layers(0, 1, layers, channels)
-weights['hid->out'] = nw.connect_layers(1, 2, layers, channels)
+weights['inp->hid(blue)'] = nw.connect_layers(0, 1, layers, channel='blue')
+weights['inp->hid(red)'] = nw.connect_layers(0, 1, layers, channel='red')
+weights['hid->out'] = nw.connect_layers(1, 2, layers, channel='red')
 # Recurrent connections possible
-weights['hid->hid'] = nw.connect_layers(1, 1, layers, channels)
+weights['hid->hid'] = nw.connect_layers(1, 1, layers, channel='red')
 
 # Define the specific node-to-node connections in the weight matrices
 # The syntax is connect_nodes(from_node, to_node, weight=value in weight matrix (default=1.0))
-weights['inp->hid'].connect_nodes(channels['blue'] ,0, channel='blue') # channels['blue']=1
-weights['inp->hid'].connect_nodes(channels['red'] ,0, channel='red')   # channels['red']=0
-weights['hid->out'].connect_nodes(0, channels['red'], 'red')
+weights['inp->hid(blue)'].connect_nodes(0 ,0) # channels['blue']=1
+weights['inp->hid(red)'].connect_nodes(1 ,0)   # channels['red']=0
+weights['hid->out'].connect_nodes(0, 0)
 
 # The explicit weight matrix can be set by
 # weights['inp->hid'].W = np.array([])
@@ -107,8 +108,8 @@ t_blue = [(2,3),(5.5,6),(7.5,8)] #
 t_red = [(4,5)] # 
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
-layers[0].set_input_func(channel='blue',func_handle=physics.square_pulse, func_args=(t_blue,Imax))
-layers[0].set_input_func(channel='red', func_handle=physics.square_pulse, func_args=(t_red, Imax))
+layers[0].set_input_func_per_node(node=0,func_handle=physics.square_pulse, func_args=(t_blue,Imax))
+layers[0].set_input_func_per_node(node=1,func_handle=physics.square_pulse, func_args=(t_red, Imax))
 
 # %% [markdown]
 # ### 6. Example dynamic simulation
@@ -136,7 +137,7 @@ while t < T:
     
     t += dt
     # Log the update
-    time_log.add_tstep(t, layers)
+    time_log.add_tstep(t, layers, unity_coeff=unity_coeff)
 
 end = time.time()
 print('Time used:',end-start)
