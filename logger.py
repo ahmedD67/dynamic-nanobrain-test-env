@@ -15,15 +15,15 @@ class Logger :
         self.list_data = []
         # Need to get the node names
         self.feedback = feedback
-        self.column_labels = self.column_names(layers,channels)
+        self.column_labels = self.column_names(layers)
         
-    def column_names(self, layers, channels) :
+    def column_names(self, layers) :
         names=['Time']
         for idx in layers.keys():
             node_list = layers[idx].get_names(idx)          
             if layers[idx].layer_type == 'input' :
-                for key in channels :
-                    names.append('I'+str(channels[key])+'-Pout-'+key)
+                for node in node_list :
+                    names.append(node+'-Pout')
                 
             elif layers[idx].layer_type == 'hidden' :
                 # Voltages
@@ -46,12 +46,12 @@ class Logger :
              
             elif layers[idx].layer_type == 'output' :
                 # Currents
-                for key in channels :
-                    names.append('O'+str(channels[key])+'-Pout-'+key)
+                for node in node_list :
+                    names.append(node+'-Pout')
                 if self.feedback :
                     # add some extra columns for the signal fed back in (C)
-                    for key in channels :
-                        names.append('O'+str(channels[key])+'-Pinp-'+key)
+                    for node in node_list :
+                        names.append(node+'-Pinp')
                     
             else :
                 print('Unexpected layer_type in logger.column_names')
@@ -65,7 +65,7 @@ class Logger :
             # Node names
             #name_list = layers[idx].get_names(idx)       
             if layers[idx].layer_type == 'input' :
-                curr=layers[idx].I.flatten(order='F').tolist()
+                curr=layers[idx].C.flatten(order='F').tolist()
                 row += curr 
             
             elif layers[idx].layer_type == 'hidden' :
@@ -90,10 +90,10 @@ class Logger :
                 
             elif layers[idx].layer_type == 'output' :
                 # Voltages
-                curr=layers[idx].B.diagonal().flatten(order='F').tolist()
+                curr=layers[idx].B.flatten(order='F').tolist()
                 row += curr 
                 if self.feedback :
-                    curr=layers[idx].C.diagonal().flatten(order='F').tolist()
+                    curr=layers[idx].C.flatten(order='F').tolist()
                     row += curr
             else :
                 print('Unexpected layer_type in logger.add_tstep')

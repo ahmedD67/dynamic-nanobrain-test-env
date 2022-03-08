@@ -46,9 +46,9 @@ channels = {channel_list[v] : v for v in range(len(channel_list))}
 
 # %%
 # Create layers 
-N_EPG = 8
-N_PEG = 2*N_EPG
-N_PEN = 2*N_EPG
+N_CL = 16
+N_TB1 = 8
+N_TN2 = 2
 
 layers = {} 
 # An input layer automatically creates on node for each channel that we define
