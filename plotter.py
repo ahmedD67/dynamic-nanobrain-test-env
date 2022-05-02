@@ -76,19 +76,29 @@ def retrieve_G(layers, weights) :
     
     return G
     
-def visualize_network(layers, weights, exclude_nodes={}, node_size=600, 
+def visualize_network(layers, weights, exclude_nodes={}, 
+                      exclude_layers=[], node_size=600,
                       layout='multipartite', show_edge_labels=True, 
                       shell_order=None, savefig=False, font_scaling=6,
-                      arrow_size=20) :
+                      arrow_size=20, **kwargs) :
     edges = {}
     for key in weights :
         edges[key] = name_edges(weights[key],layers)
     
     nodes = name_nodes(layers)
+    # Remove specific nodes in specific layers
     for key in exclude_nodes :
         for node in exclude_nodes[key] :
             nodes[key].remove(node)
-        
+    # Remove layers using their key
+    for key in exclude_layers:
+        del nodes[key]
+        # Search for corresponding edges
+        edges_to_remove = [edge for edge in edges.keys() if key in edge]
+        # Now we can delete the keys without changing what we loop over
+        for edge_key in edges_to_remove :
+            del edges[edge_key]
+            
     
     # Construct a graph
     G = nx.DiGraph()
@@ -120,7 +130,7 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600,
     if layout=='multipartite' :
         pos=nx.multipartite_layout(G)
     elif layout=='spring' :
-        pos=nx.spring_layout(G, iterations=500, threshold=1e-5)
+        pos=nx.spring_layout(G, iterations=10000, threshold=1e-5, **kwargs)
     elif layout=='circular' :
         pos=nx.circular_layout(G)
     elif layout=='spiral' :
@@ -183,7 +193,7 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600,
     
     plt.show()
     
-    return G
+    return pos
 
 def simple_paths(G,source, target) :
     paths = nx.all_simple_paths(G,source,target)
@@ -528,6 +538,32 @@ def subplot_attr(target, res, attr) :
     
     target.set_title(attr)
     
+def subplot_trace(target, res, layer, attr, titles) :
+    # Get the relevant nodes
+    columns = [name for name in res.columns if (attr in name) and (layer in name)]
+    
+    if columns[0][3] == 'V' :
+        ylabel = 'Voltage (V)' 
+    else:
+        ylabel = 'Current (nA)'
+    
+    #TIME, INDEX = np.meshgrid(res['Time'])
+    node_idx = [x+1 for x in range(0,len(columns))]
+    import numpy as np
+    TIME, INDEX = np.meshgrid(res['Time'].values,node_idx)
+    # Produce a 2D plot of values over time
+    im = target.pcolormesh(TIME,INDEX,res[columns].values.transpose(),
+                           cmap='viridis', rasterized=True,
+                           shading='auto')
+    
+    plt.colorbar(im, ax=target, label=ylabel)  
+    target.set_yticks(np.array(node_idx[:-1])+0.5)
+    target.set_yticklabels(node_idx[:-1])
+    target.set_ylabel('Node idx')
+    target.set_xlabel('Time (ns)')
+    if titles :
+        target.set_title(layer)
+    
 def subplot_chain(target, res, nodes, data_label) :
     columns = [name for node in nodes for name in res.columns if (node in name and data_label in name)]
     short_names = [name[:2] for name in columns]
@@ -601,7 +637,36 @@ def plot_nodes(res, nodes, plot_all=False, onecolumn=False, doublewidth=True,
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
     
+def plot_traces(res, layers, attr, onecolumn=False, doublewidth=True,
+                time_interval=None, titles=False)    :
+
+    Nrows = len(layers)
+    Ncols = 1 # Put traces with a shared x-axis
+    if doublewidth : 
+        nature_width = nature_double 
+    else :  
+        nature_width = nature_single
+        
+    fig, axs = plt.subplots(Nrows, Ncols, 
+                            figsize=(nature_width*Ncols, 0.5*nature_single*Nrows),
+                            sharex=True) 
     
+    # Select the approperiate time interval
+    if time_interval is not None :
+        select_res = res[(res["Time"]>=time_interval[0]) & (res["Time"]<=time_interval[1])]
+    else : 
+        select_res = res
+        
+    if Nrows > 1 :
+        for k, ax in enumerate(axs.flatten()) :
+            subplot_trace(ax, select_res, layers[k], attr, titles)
+    else:
+        subplot_trace(axs, select_res, layers[0], attr, titles)
+        
+    plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
+    plt.tight_layout()
+    
+
 def plot_attributes(res, attr, onecolumn=False, doublewidth=True) :
     """
     Plots a set of chosen attributes for all nodes
@@ -640,6 +705,25 @@ def plot_attributes(res, attr, onecolumn=False, doublewidth=True) :
             subplot_attr(ax, res, attr[k])
     else :
         subplot_attr(axs, res, attr[0])
+    
+    plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
+    plt.tight_layout()
+    
+def plot_devices(devices, Vleaks, noise=None, **kwargs) :
+    """Function to show many devices. Could be extended with rows for added noise"""
+    # Generate the figure    
+    Nrows = 1  
+    Ncols = len(devices)
+    fig, axs = plt.subplots(Nrows, Ncols, 
+                            figsize=(nature_single*Ncols, nature_single*Nrows))
+     
+    for k, key in enumerate(devices) : # flatten in case of 2D array
+        # For each device we ask for the transistor example IV
+        df_iv = devices[key].transistorIV_example(**kwargs)
+        df_iv.plot(subplots=False, ax=axs[k], sharex=False, sharey=False,
+                x = 'Vgate', y = 'Current', xlabel='Vgate (V)', ylabel='Current (uA)',
+                title=key)
+        axs[k].set_ylim(0,10)
     
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()

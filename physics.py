@@ -64,7 +64,7 @@ class Device:
         return np.piecewise(Vg, [Vg<Vt, Vg>=Vt], [self.Id_sub, self.Id_sat])   
     
     def transistorIV_example (self, Vstart=-0.5, Vend=1.0) :
-        # Generate a sample transistor IV
+        # Generate a sample transistor IV, generates data in uA
         NV = 200
         
         Vgate = np.linspace(Vstart, Vend, NV)
@@ -89,6 +89,16 @@ class Device:
         gled = 1e-9/self.p_dict['CLED']/self.p_dict['RLED'] # ns^-1 # GHz
 
         return np.array([g11,g22,g13,g23,g33,gled])
+
+    def calc_tau_gate(self) :
+        # Sum the memory and gate capacitance, convert Lg in um to cm
+        Cmem = self.p_dict['Cstore'] + self.p_dict['Cgate']*self.p_dict['Lg']*1e-4 
+        # System frequencies
+        g13 = 1e-9/Cmem/self.p_dict['Rinh'] # ns^-1 # GHz
+        g23 = 1e-9/Cmem/self.p_dict['Rexc'] # ns^-1 # GHz
+        g33 = 1e-9/Cmem/self.p_dict['Rstore'] # ns^-1 # GHz
+        # Modifying this as it is g33 that matter for a system in equilibrium
+        return g33**-1
 
     # System matrix setup
     def A_mat(self,g11,g22,g13,g23,g33) :
@@ -165,7 +175,7 @@ class Device:
         # Remember nA
         Rsum=self.p_dict['Rstore']+self.p_dict['Rexc']
         max_Vg = Vthres*self.p_dict['Rstore']/Rsum
-        Iexc = Vthres/Rsum*1e9
+        Iexc = Vthres/Rsum*1e9 # nA
         Isd = self.transistorIV(max_Vg) 
         Iout = eta_handle(Isd)*Isd
         return Iexc/Iout, Iexc

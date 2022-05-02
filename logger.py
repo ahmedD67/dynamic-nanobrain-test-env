@@ -11,7 +11,7 @@ import pandas as pd
 
 class Logger :
     
-    def __init__(self,layers,channels,feedback=False) :
+    def __init__(self,layers,feedback=False) :
         self.list_data = []
         # Need to get the node names
         self.feedback = feedback

@@ -37,17 +37,23 @@ class Layer :
         
     # TODO: This does not work perfectly for 2 input layers (first hidden layer 'K')
     def get_node_name(self,node_idx,layer_idx=1) :
-        if self.layer_type=='hidden' :
-            # Name hidden layers using sequence (defaults to 'H')
-            letters = 'HKLMN'
-            letter = letters[layer_idx-1]
-        elif self.layer_type=='input' :
-            # Name input layers using sequence (defaults to 'I')
-            letters = 'IJ'
-            letter = letters[layer_idx]
+        if type(layer_idx) is int :
+            # Name using the standard convention
+            if self.layer_type=='hidden' :
+                # Name hidden layers using sequence (defaults to 'H')
+                letters = 'HKLMN'
+                letter = letters[layer_idx-1]
+            elif self.layer_type=='input' :
+                # Name input layers using sequence (defaults to 'I')
+                letters = 'IJ'
+                letter = letters[layer_idx]
+            else :
+                # if not hidden or input layer
+                letter = self.layer_type[0].upper()
         else :
-            # if not hidden or input layer
-            letter = self.layer_type[0].upper()
+            # Use the layer key as a name
+            letter = layer_idx + '_' # now this is a label instead
+                
         idx = str(node_idx)
         return letter+idx
     
@@ -461,7 +467,7 @@ def connect_layers(down, up, layers, channel) :
         
         # TODO: How about an connect_all keyword here to avoid boilerplate
         def __init__(self, down, up, layers, channel, connect_all=False) :
-            """ Contructor function for the Weight class."""
+            """ Contructor function for the Weight class. """
             # Should not assume correct ordering here
             self.from_layer = down
             self.to_layer = up
@@ -471,7 +477,7 @@ def connect_layers(down, up, layers, channel) :
             # Initialize matrices
             L0 = layers[down]
             L1 = layers[up]
-            self.W = np.zeros((L1.N,L0.N))
+            self.W = np.zeros((L1.N,L0.N),dtype=float)
             if connect_all :
                 self.W[:,:]=1
                        
@@ -515,7 +521,7 @@ def connect_layers(down, up, layers, channel) :
         def print_W(self, *args):
             """ Print the weights."""
             def print_W(key,W) :
-                with np.printoptions(precision=2, suppress=True):
+                with np.printoptions(precision=4, suppress=True):
                     print('{0}:\n{1}'.format(key,W))
                     
             print_W(self.channel,self.W)
@@ -523,6 +529,10 @@ def connect_layers(down, up, layers, channel) :
         def set_W(self, W) :
             """ Set weight matrix manually."""
             self.W = W
+            
+        def scale_W(self, scale) :
+            """ Scale weight matrix manually."""
+            self.W = self.W * scale
             
         def ask_W(self,silent=False) :
             """ Print the shape of the weight matrix.""" 

@@ -114,12 +114,10 @@ plotter.visualize_network(layers, weights, layout='shell',
 # Specify two types of devices for the hidden layer
 # 1. Propagator (standard parameters)
 propagator = physics.Device('../parameters/device_parameters.txt')
-
 propagator.print_parameter('Rstore')
 # 2. Memory (modify the parameters)
-memory = physics.Device('../parameters/device_parameters_memory.txt')
-memory.set_parameter('Rstore', 2e8)
-memory.set_parameter('Cstore',0.7e-15) # TRY THIS TO SEE WHAT CHANGES
+memory = physics.Device('../parameters/device_parameters.txt')
+memory.set_parameter('Rstore',2e7)
 memory.print_parameter('Rstore')
 
 # %%
@@ -139,88 +137,11 @@ print(f'Imax is found to be {Imax} nA')
 # %%
 # Specify an exciting current square pulse and a constant inhibition
 # Pulse train of 1 ns pulses
-t_blue = [(5.0,15.0)]#, (255.0,455.0)] # 
+t_blue = [(6.0,8.0), (11.0,13.0), (16.0,18.0)] # at 6 ns, 11 ns, and 16 ns
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
 layers[0].set_input_vector_func(func_handle=physics.square_pulse, func_args=(t_blue, 1.0*Imax))
 
-# %% [markdown]
-# Produce Bode plots to determine what our frequency cutoff will be
-
-# %%
-# Setup the gain function
-eigvals = propagator.setup_gain(propagator.gammas)
-
-# The eigenvalues
-print('System eigenvalues:')
-k=0
-for l in eigvals :
-    print(f'eig[{k}]={l:.2f} ns^-1 ')
-    k+=1
-# Regarding the eigenvalues, eig[0]=-25.81 ns^-1, eig[1]=-5.00 ns^-1, eig[2]=-0.19 ns^-1
-# eig[1] regards the charge collecting subsystem, this is their RC constant
-# eig[0] regards the exchange between the collectors and the storage, I believe. For A33=20 it's zero
-# eig[2] regards the time scale of the storage unit, the longest timescale in the system.
-    
-# PUT THIS IN THE PLOTTER MODULE
-import numpy as np
-# Visualize the response function 
-Ns = 100
-# Units are already in GHz so this creates a space from 1 MHz to 10 GHz
-s_exp = np.linspace(-5,1,Ns)
-s = 1j*10**s_exp
-
-# Sample the gain function
-G11, _ = propagator.gain(s,eigvals,propagator.gammas)
-
-mag_G11 = np.absolute(G11) / np.absolute(G11[0])
-arg_G11 = np.angle(G11)
-
-mag_G11_dB = 20*np.log10(mag_G11)
-
-# %%
-# Produce Bode plots of the results
-# Define parameters
-my_dpi = 300
-prop_cycle = plt.rcParams['axes.prop_cycle']
-colors = prop_cycle.by_key()['color']
-
-# Figure sizes
-inchmm = 25.4
-nature_single = 89.0 / 25.4
-nature_double = 183.0 / 25.4
-nature_full = 247.0 / 25.4
-
-# Plot options
-font = {'family' : 'sans',
-        'weight' : 'normal',
-        'size'   : 12}
-plt.rc('font', **font)
-
-fig, (ax1, ax2) = plt.subplots(2,1,figsize=(nature_double,nature_single),sharex=True)
-
-f_min = abs(s[0])
-plot_f_max = 3.0 # GHz
-
-ax1.plot(abs(s),mag_G11_dB)
-ax1.plot([f_min,plot_f_max],[-3,-3],'k--')
-ax1.grid('True')
-ax1.set_xscale('log')
-ax1.set_title('Bode plots for dynamic node')
-#ax1.set_xlabel('Frequency (GHz)')
-ax1.set_ylabel('|G11|/|G11[0]| (dB)')
-ax1.set_ylabel('|H| (dB)')
-ax1.set_xlim(f_min,plot_f_max)
-ax1.set_ylim(-20,2)
-
-ax2.plot(abs(s),arg_G11*180/np.pi)
-ax2.grid('True')
-#ax2.set_xscale('log')
-ax2.set_xlabel('Frequency (GHz)')
-ax2.set_ylabel('Phase (radians)')
-ax2.set_ylim(-180,10)
-
-plt.show()
 
 # %% [markdown]
 # ### 6. Evolve in time
@@ -228,13 +149,13 @@ plt.show()
 # %%
 # Start time t, end time T
 t = 0.0
-T = 100.0 # ns
+T = 20.0 # ns
 # To sample result over a fixed time-step, use savetime
-savestep = 1.0
+savestep = 0.1
 savetime = savestep
 # These parameters are used to determine an appropriate time step each update
 dtmax = 0.1 # ns 
-dVmax = 0.001 # V
+dVmax = 0.005 # V
 
 nw.reset(layers)
 # Create a log over the dynamic data
@@ -311,7 +232,3 @@ plotter.visualize_transistor(propagator.transistorIV_example())
 plotter.visualize_LED_efficiency(propagator.eta_example(propagator.eta_ABC))
 
 # %%
-tau_memory = memory.calc_tau_gate() # 0.056 ns
-tau_propagator = propagator.calc_tau_gate()
-gammas_memory = memory.calc_gammas()
-gammas_propagator = propagator.calc_gammas()
