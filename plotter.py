@@ -472,6 +472,8 @@ def subplot_input_output(target, res, channels) :
         ax2.set_ylabel('Output current (A)')
         
 def subplot_node(target, res, node, plot_all=False) :
+    # Add a dash to find the correct node
+    node += '-'
     # Get all the labels for that node
     columns = [name for name in res.columns if node in name]
 

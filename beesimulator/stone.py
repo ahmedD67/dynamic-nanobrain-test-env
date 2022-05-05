@@ -60,7 +60,7 @@ class TravelLog :
 class StoneNetwork :
     
     def __init__(self,name='StoneNetwork', input_scaling=1.0, tb1_c=0.33, 
-                 mem_update_h=1.25) :
+                 mem_update_h=0.0025) :
         self.name = name
         self.input_scaling=input_scaling
         self.tb1_c=tb1_c
