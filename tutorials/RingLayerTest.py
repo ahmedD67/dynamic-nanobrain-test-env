@@ -142,7 +142,7 @@ dVmax = 0.005 # V
 
 nw.reset(layers)
 # Create a log over the dynamic data
-time_log = logger.Logger(layers,channels) # might need some flags
+time_log = logger.Logger(layers) # might need some flags
 
 start = time.time()
 

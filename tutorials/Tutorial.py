@@ -124,7 +124,7 @@ dVmax = 0.001 # V
 
 nw.reset(layers)
 # Create an instance of Logger to store the data
-time_log = logger.Logger(layers,channels) 
+time_log = logger.Logger(layers) 
 
 start = time.time()
 

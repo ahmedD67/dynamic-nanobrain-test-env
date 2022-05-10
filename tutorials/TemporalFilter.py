@@ -31,20 +31,11 @@ from context import logger
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 
 # %% [markdown]
-# ### 1. Define the broadcasting channels of the network
-# This is done by creating a list of the channel names. The names are arbitrary and can be set by the user, such as 'postive', 'negative' or explicit wavelenghts like '870 nm', '700 nm'. Here I chose the colors 'red' and 'blue'.
-
-# %%
-channel_list = ['blue','red']
-# Automatically generate the object that handles them
-channels = {channel_list[v] : v for v in range(len(channel_list))}
-
-# %% [markdown]
-# ### 2. Define the layers
+# ### 1. Define the layers
 # Define the layers of nodes in terms of how they are connected to the channels. Layers and weights are organized in dictionaries. The input and output layers do not need to be changed, but for the hidden layer we need to specify the number of nodes N and assign the correct channels to the input/output of the node.
 
 # %%
-# Create layers ordered from 0 to P organized in a dictionary
+# Create layers ordered from 0 organized in a dictionary. Arbitrary labels can be used, i.e. 'TB1','CPU4' etc.
 layers = {} 
 # An input layer automatically creates on node for each channel that we define
 layers[0] = nw.InputLayer(N=1)
@@ -55,7 +46,9 @@ layers[2] = nw.HiddenLayer(N=1, output_channel='red' ,excitation_channel='blue',
 layers[3] = nw.OutputLayer(N=1) # similar to input layer
 
 # %% [markdown]
-# ### 3. Define existing connections between layers
+# ### 2. Define abstract connections between layers
+# First, we define which layers are connected to which. The explicit weights
+# are set in the next step.
 # The weights are set in two steps. 
 # First the connetions between layers are defined. This should be done using the keys defined for each layer above, i.e. 0, 1, 2 ... for input, hidden and output layers, respectively. The `connect_layers` function returns a weight matrix object that we store under a chosen key, for example `'inp->hid'`.
 # Second, the specific connections on the node-to-node level are specified using the node index in each layer
@@ -63,28 +56,32 @@ layers[3] = nw.OutputLayer(N=1) # similar to input layer
 # %%
 # Define the overall connectivity
 weights = {}
-# The syntax is connect_layers(from_layer, to_layer, layers, channels)
+# The syntax is connect_layers(from_layer, to_layer, layers, channel)
 weights['inp->hd0'] = nw.connect_layers(0, 1, layers, channel='blue')
 weights['hd0->hd1'] = nw.connect_layers(1, 2, layers, channel='blue')
 weights['hd0->out'] = nw.connect_layers(1, 3, layers, channel='blue')
 # Backwards connection from the memory
 weights['hd1->hd0'] = nw.connect_layers(2, 1, layers, channel='red')
 
-# Define the specific node-to-node connections in the weight matrices
-low_weight =  1.0 # 0.02
-# The syntax is connect_nodes(from_node, to_node, channel=label, weight=value in weight matrix)
-self_inhib = 1.0
-# Draw a ring network with Nring nodes (Nring defined above)
+# %% [markdown]
+# ### 3. Define the specific connections
+# Here, the specific connections on the node-to-node level are specified using the node index in each layer.
+# Weights can also be set using a matrix (a bit boring here but possible)
 
+#%%
+# Define the specific node-to-node connections in the weight matrices
+# -----------------------------------------
 # Input to first ring layer node
 weights['inp->hd0'].connect_nodes(0 ,0,weight=1.0) # channels['blue']=1
 #weights['inp->hd0'].connect_nodes(channels['red'] ,0, channel='red', weight=1.0) # channels['blue']=1
 # Hidden layer connections
-weights['hd0->hd1'].connect_nodes(0 ,0 , weight=self_inhib) 
+weights['hd0->hd1'].connect_nodes(0 ,0 , weight=1.0) 
 # Add damping connection
-weights['hd1->hd0'].connect_nodes(0 ,0 , weight=self_inhib)    
-# Connect to output
-weights['hd0->out'].connect_nodes(0, 0, weight=0.9)
+weights['hd1->hd0'].connect_nodes(0 ,0 , weight=1.0)    
+# Connect to output, we can also use matrices
+import numpy as np
+weight_mat = np.array([[0.9]])
+weights['hd0->out'].set_W(weight_mat)
 
 
 # %% [markdown]
@@ -117,7 +114,7 @@ propagator = physics.Device('../parameters/device_parameters.txt')
 propagator.print_parameter('Rstore')
 # 2. Memory (modify the parameters)
 memory = physics.Device('../parameters/device_parameters.txt')
-memory.set_parameter('Rstore',2e7)
+memory.set_parameter('Rstore',2e7) # Ohms, original value us 2e6 Ohms
 memory.print_parameter('Rstore')
 
 # %%
@@ -142,7 +139,6 @@ t_blue = [(6.0,8.0), (11.0,13.0), (16.0,18.0)] # at 6 ns, 11 ns, and 16 ns
 # Use the square pulse function and specify which node in the input layer gets which pulse
 layers[0].set_input_vector_func(func_handle=physics.square_pulse, func_args=(t_blue, 1.0*Imax))
 
-
 # %% [markdown]
 # ### 6. Evolve in time
 
@@ -159,7 +155,7 @@ dVmax = 0.005 # V
 
 nw.reset(layers)
 # Create a log over the dynamic data
-time_log = logger.Logger(layers,channels) # might need some flags
+time_log = logger.Logger(layers) # might need some flags
 
 start = time.time()
 

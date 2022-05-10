@@ -6,12 +6,11 @@ Created on Tue Jun  8 13:46:38 2021
 @author: dwinge
 """
 
-import numpy as np
 import pandas as pd
 
 class Logger :
     
-    def __init__(self,layers,channels,feedback=False) :
+    def __init__(self,layers,feedback=False) :
         self.list_data = []
         # Need to get the node names
         self.feedback = feedback
