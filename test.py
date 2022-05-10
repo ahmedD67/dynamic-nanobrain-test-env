@@ -64,3 +64,58 @@ plt.plot(theta,v[1],label='vy')
 plt.legend()
 plt.grid(True)
 plt.show()
+
+#%% Pandas test
+import pandas as pd
+import numpy as np
+
+df = pd.DataFrame(
+    [["bar", "one"], ["bar", "two"], ["foo", "one"], ["foo", "two"]],
+    columns=["first", "second"],
+    )
+
+pd.MultiIndex.from_frame(df)
+
+arrays = [
+    np.array(["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"]),
+    np.array(["one", "two", "one", "two", "one", "two", "one", "two"]),
+    ]
+
+s = pd.Series(np.random.randn(8), index=arrays)
+
+
+# Create 3 datasets
+
+Nrows = 8
+df1 = pd.DataFrame(np.random.randn(Nrows, 2),columns=['x','y'])
+#df1['key'] = [1]*Nrows
+df2 = pd.DataFrame(np.random.randn(Nrows+1, 2),columns=['x','y'])
+#df2['key'] = [2]*Nrows
+
+DF = pd.concat([df1,df2],keys=[0,1])
+
+DF['x'][0]
+
+
+DF.to_pickle('test.pkl')
+
+
+unpickled_df = pd.read_pickle("./test.pkl")  
+
+
+#%%
+np.random.seed(1618033)
+
+#Set 3 axis labels/dims
+years = np.arange(2000,2010) #Years
+samples = np.arange(0,20) #Samples
+patients = np.array(["patient_%d" % i for i in range(0,3)]) #Patients
+
+#Create random 3D array to simulate data from dims above
+A_3D = np.random.random((years.size, samples.size, len(patients))) #(10, 20, 3)
+
+# Create the MultiIndex from years, samples and patients.
+midx = pd.MultiIndex.from_product([years, samples, patients])
+
+# Create sample data for each patient, and add the MultiIndex.
+patient_data = pd.DataFrame(np.random.randn(len(midx), 3), index = midx)

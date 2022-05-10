@@ -50,7 +50,7 @@ class TravelLog :
         # velocity
         vel = v.flatten(order='F').tolist()
         row += vel
-        row += [heading,motor] # needs to be a list to be appended
+        row += [heading] # skipped motor here, plus needs to be a list to be appended
         self.list_data.append(row)
         
     def get_timelog(self) :
@@ -66,6 +66,8 @@ class StoneNetwork :
         self.tb1_c=tb1_c
         self.mem_update_h = mem_update_h
         self.layers, self.weights = self.initialize_nw()
+        # Initialize a dictionary for the devices
+        self.devices = {}
 
         
     def initialize_nw(self) :
@@ -93,13 +95,13 @@ class StoneNetwork :
         weights['TB1->TB1'].set_W(W)
         
         weights['TB1->CPU4']=nw.connect_layers('TB1', 'CPU4', layers, channel='green')
-        W = np.tile(np.diag([1]*N_TB1),(2,1)) 
+        W = np.tile(np.diag([1.0]*N_TB1),(2,1)) 
         weights['TB1->CPU4'].set_W(W)
         # The memory is updated with a lower weight
         weights['TB1->CPU4'].scale_W(self.mem_update_h)
         
         weights['TB1->CPU1a']=nw.connect_layers('TB1', 'CPU1a', layers, channel='green')
-        W = np.tile(np.diag([1]*N_TB1),(2,1))
+        W = np.tile(np.diag([1.0]*N_TB1),(2,1))
         weights['TB1->CPU1a'].set_W(W[1:-1])
         
         weights['TB1->CPU1b']=nw.connect_layers('TB1', 'CPU1b', layers, channel='green')
@@ -134,12 +136,12 @@ class StoneNetwork :
         
         weights['CPU4->CPU1b']=nw.connect_layers('CPU4', 'CPU1b', layers, channel='orange')
         W = np.zeros((2,N_CPU4))
-        W[0,0]=1
-        W[-1,-1]=1
+        W[0,0]=1.0
+        W[-1,-1]=1.0
         weights['CPU4->CPU1b'].set_W(W)
         
         weights['CPU4->Pontine']=nw.connect_layers('CPU4', 'Pontine', layers, channel='orange')
-        W = np.diag([1]*N_CPU4)
+        W = np.diag([1.0]*N_CPU4)
         weights['CPU4->Pontine'].set_W(W)
         
         weights['Pontine->CPU1a']=nw.connect_layers('Pontine', 'CPU1a', layers, channel='green')
@@ -157,7 +159,7 @@ class StoneNetwork :
                         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                         [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                         [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], #15])
-                        ])
+                        ],dtype=float)
         weights['Pontine->CPU1a'].set_W(W)
         
         weights['Pontine->CPU1b']=nw.connect_layers('Pontine', 'CPU1b', layers, channel='green')
@@ -179,15 +181,20 @@ class StoneNetwork :
         
         return pos
         
+    def show_weights(self, **kwargs) :
+        fig, ax = plotter.plot_weights(self.weights, **kwargs)
+        return fig, ax
+        
     def assign_device(self, device_dict, unity_key) :
         for key in device_dict :
             self.layers[key].assign_device(device_dict[key])
+            self.devices[key] = device_dict[key]
         unity_device = device_dict[unity_key]
         self.unity_coeff, self.Imax = unity_device.inverse_gain_coefficient(unity_device.eta_ABC, self.layers[unity_key].Vthres)
-    
-    def show_devices(self, device_dict, Vleak_dict, **kwargs) :
 
-        plotter.plot_devices(device_dict, Vleak_dict, **kwargs)
+    def show_devices(self, Vleak_dict, **kwargs) :
+        # Send the class own device dict
+        plotter.plot_devices(self.devices, Vleak_dict, **kwargs)
         
     def assign_memory(self, key, device) :
         self.layers[key].assign_device(device)
@@ -205,7 +212,8 @@ class StoneNetwork :
         
     def evolve(self,T,reset=True,t0=0.,inbound=False,savestep=1.0,
                initial_pos=(0,0),initial_vel=(0,0),initial_heading=0,
-               a=0.1, drag=0.15, updateheading_m=default_update_m) : 
+               a=0.1, drag=0.15, updateheading_m=default_update_m,
+               printdiag=False) : 
         
         from context import logger
         from context import timemarching as tm
@@ -239,9 +247,6 @@ class StoneNetwork :
             x = np.array(initial_pos)
             heading = initial_heading
             travel_log.add_tstep(t, x, v, heading, 0.0) # motor=0 for duplcate first step
-            
-            # Diagnostics
-            printdiag = True
             
             # Allow the agent to determine its speed through TN2 layer
             def get_flow(heading, v, pref_angle=np.pi/4):

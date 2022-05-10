@@ -479,7 +479,7 @@ def connect_layers(down, up, layers, channel) :
             L1 = layers[up]
             self.W = np.zeros((L1.N,L0.N),dtype=float)
             if connect_all :
-                self.W[:,:]=1
+                self.W[:,:]=1.0
                        
         # Define an explicit connection
         def connect_nodes(self, from_node, to_node, weight=1.0)  : 
