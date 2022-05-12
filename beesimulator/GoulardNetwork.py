@@ -18,7 +18,6 @@
 # %load_ext autoreload
 # %autoreload 2
 
-import networkx as nx
 import matplotlib.pyplot as plt
 import time
 import numpy as np

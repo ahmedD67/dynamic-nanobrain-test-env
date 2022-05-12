@@ -76,19 +76,29 @@ def retrieve_G(layers, weights) :
     
     return G
     
-def visualize_network(layers, weights, exclude_nodes={}, node_size=600, 
+def visualize_network(layers, weights, exclude_nodes={}, 
+                      exclude_layers=[], node_size=600,
                       layout='multipartite', show_edge_labels=True, 
                       shell_order=None, savefig=False, font_scaling=6,
-                      arrow_size=20) :
+                      arrow_size=20, **kwargs) :
     edges = {}
     for key in weights :
         edges[key] = name_edges(weights[key],layers)
     
     nodes = name_nodes(layers)
+    # Remove specific nodes in specific layers
     for key in exclude_nodes :
         for node in exclude_nodes[key] :
             nodes[key].remove(node)
-        
+    # Remove layers using their key
+    for key in exclude_layers:
+        del nodes[key]
+        # Search for corresponding edges
+        edges_to_remove = [edge for edge in edges.keys() if key in edge]
+        # Now we can delete the keys without changing what we loop over
+        for edge_key in edges_to_remove :
+            del edges[edge_key]
+            
     
     # Construct a graph
     G = nx.DiGraph()
@@ -120,7 +130,7 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600,
     if layout=='multipartite' :
         pos=nx.multipartite_layout(G)
     elif layout=='spring' :
-        pos=nx.spring_layout(G, iterations=500, threshold=1e-5)
+        pos=nx.spring_layout(G, iterations=10000, threshold=1e-5, **kwargs)
     elif layout=='circular' :
         pos=nx.circular_layout(G)
     elif layout=='spiral' :
@@ -183,7 +193,7 @@ def visualize_network(layers, weights, exclude_nodes={}, node_size=600,
     
     plt.show()
     
-    return G
+    return pos
 
 def simple_paths(G,source, target) :
     paths = nx.all_simple_paths(G,source,target)
@@ -375,6 +385,87 @@ def movie_maker(movie_series, layers, weights, exclude_nodes={}, node_size=600, 
     # Show animation in the end    
     plt.show()
 
+def plot_weights(weights, colormap='viridis', savefig=False) :
+    
+    import numpy as np
+    import matplotlib.cm as cm
+    
+    titles = weights.keys()
+    Nplots = len(titles)
+    Ncols = 4 # set max columns to 4
+    Nrows = Nplots // Ncols + min(Nplots % Ncols,1)
+    
+    ticklabels = {'TL2': range(1, 17),
+                  'CL1': range(1, 17),
+                  'TB1': range(1, 9),
+                  'TN2': ['L', 'R'],
+                  'CPU4': range(1, 17),
+                  'Pontine': range(1, 17),
+                  'CPU1a': range(2, 16),
+                  'CPU1b': range(8, 10)}
+    
+    fig, ax = plt.subplots(Nrows, Ncols, 
+                           figsize=(nature_single*Nrows,nature_single*Ncols))
+    
+    for i, key in enumerate(weights):
+        cax = ax[i // Ncols][i % Ncols]
+        # Get some data, sources and targets
+        weight_mat = np.copy(weights[key].W)
+        # Normalize
+        #print(key)
+        norm = weight_mat.max()
+        weight_mat /= norm
+        
+        source, target = key.split('->')
+        
+        p = cax.pcolor(weight_mat, cmap=colormap, vmin=-1, vmax=1)
+        p.set_edgecolor('face')
+        cax.set_aspect('equal')
+
+        cax.set_xticks(np.arange(weight_mat.shape[1]) + 0.5)
+        cax.set_xticklabels(ticklabels[source])
+
+        cax.set_yticks(np.arange(weight_mat.shape[0]) + 0.5)
+        cax.set_yticklabels(ticklabels[target])
+
+        if i == 12:
+            cax.set_title(source + ' to ' + target, y=1.41)
+        else:
+            cax.set_title(source + ' to ' + target)
+
+        cax.set_xlabel(source + ' cell indices')
+        cax.set_ylabel(target + ' cell indices')
+        cax.tick_params(axis=u'both', which=u'both', length=0)
+
+    # delete extra axes
+    for k in range(i+1,Nrows*Ncols) :
+        cax = ax[k // Ncols][k % Ncols]
+        fig.delaxes(cax)
+
+    #cbax = fig.add_axes([1.02, 0.05, 0.02, 0.9])
+    cbax = fig.add_axes([0.85, 0.05, 0.02, 0.3])
+    m = cm.ScalarMappable(cmap=colormap)
+    m.set_array(np.linspace(-1, 1, 100))
+    cb = fig.colorbar(m, cbax, ticks=[-1, -0.5, 0, 0.5, 1])
+    cb.set_label('Connection Strength', labelpad=10)
+    cb.ax.set_yticklabels(['-1.0','-0.5','0.0','0.5','1.0'])
+    #cb.set_clim(0.,1.)
+    
+    plt.subplots_adjust(
+        left = 0.05,  # the left side of the subplots of the figure
+        right = 0.95,   # the right side of the subplots of the figure
+        bottom = 0.05,  # the bottom of the subplots of the figure
+        top = 0.95,     # the top of the subplots of the figure
+        wspace = 0.3,  # the amount of width reserved for space between subplots,
+                      # expressed as a fraction of the average axis width        
+        hspace = 0.2,  # the amount of height reserved for space between subplots,
+                      # expressed as a fraction of the average axis height)
+                      )
+    
+    #plt.tight_layout()
+    
+    return fig, ax
+    
 def visualize_scaled_result(res, columns, scaling=None, time_interval=None) :
     # Make a copy to do nasty things to
     scaled  = res.copy()
@@ -462,6 +553,8 @@ def subplot_input_output(target, res, channels) :
         ax2.set_ylabel('Output current (A)')
         
 def subplot_node(target, res, node, plot_all=False) :
+    # Add a dash to find the correct node
+    node += '-'
     # Get all the labels for that node
     columns = [name for name in res.columns if node in name]
 
@@ -527,6 +620,44 @@ def subplot_attr(target, res, attr) :
              xlabel='Time (ns)', ylabel=ylabel, label=short_names)
     
     target.set_title(attr)
+    
+def subplot_trace(target, res, layer, attr, titles) :
+    # Get the relevant nodes
+    columns = [name for name in res.columns if (attr in name) and (layer in name)]
+    
+    # If we are plotting CPU1, we permute the one step forward
+    if layer == 'CPU1' :
+        columns.insert(0,columns.pop(-1))
+    
+    #print(columns)
+    
+    if columns[0][3] == 'V' :
+        ylabel = 'Voltage (V)' 
+    else:
+        ylabel = 'Current (nA)'
+    
+    #TIME, INDEX = np.meshgrid(res['Time'])
+    node_idx = [x+1 for x in range(0,len(columns))]
+    # Need to copy as assigned by reference
+    node_labels = node_idx.copy()
+    if layer == 'CPU1' :
+        node_labels[0] = 'CPU1b_9'
+        node_labels[-1] = 'CPU1b_8'
+        
+    import numpy as np
+    TIME, INDEX = np.meshgrid(res['Time'].values,node_idx)
+    # Produce a 2D plot of values over time
+    im = target.pcolormesh(TIME,INDEX,res[columns].values.transpose(),
+                           cmap='viridis', rasterized=True,
+                           shading='auto')
+    
+    plt.colorbar(im, ax=target, label=ylabel)  
+    target.set_yticks(np.array(node_idx))
+    target.set_yticklabels(node_labels)
+    target.set_ylabel('Node idx')
+    target.set_xlabel('Time (ns)')
+    if titles :
+        target.set_title(layer)
     
 def subplot_chain(target, res, nodes, data_label) :
     columns = [name for node in nodes for name in res.columns if (node in name and data_label in name)]
@@ -601,7 +732,38 @@ def plot_nodes(res, nodes, plot_all=False, onecolumn=False, doublewidth=True,
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
     
+def plot_traces(res, layers, attr, onecolumn=False, doublewidth=True,
+                time_interval=None, titles=False)    :
+           
+    Nrows = len(layers)
+    Ncols = 1 # Put traces with a shared x-axis
+    if doublewidth : 
+        nature_width = nature_double 
+    else :  
+        nature_width = nature_single
+        
+    fig, axs = plt.subplots(Nrows, Ncols, 
+                            figsize=(nature_width*Ncols, 0.5*nature_single*Nrows),
+                            sharex=True) 
     
+    # Select the approperiate time interval
+    if time_interval is not None :
+        select_res = res[(res["Time"]>=time_interval[0]) & (res["Time"]<=time_interval[1])]
+    else : 
+        select_res = res
+        
+    if Nrows > 1 :
+        for k, ax in enumerate(axs.flatten()) :
+            subplot_trace(ax, select_res, layers[k], attr, titles)
+    else:
+        subplot_trace(axs, select_res, layers[0], attr, titles)
+        
+    plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
+    plt.tight_layout()
+    
+    return fig, axs
+    
+
 def plot_attributes(res, attr, onecolumn=False, doublewidth=True) :
     """
     Plots a set of chosen attributes for all nodes
@@ -640,6 +802,25 @@ def plot_attributes(res, attr, onecolumn=False, doublewidth=True) :
             subplot_attr(ax, res, attr[k])
     else :
         subplot_attr(axs, res, attr[0])
+    
+    plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
+    plt.tight_layout()
+    
+def plot_devices(devices, Vleaks, noise=None, **kwargs) :
+    """Function to show many devices. Could be extended with rows for added noise"""
+    # Generate the figure    
+    Nrows = 1  
+    Ncols = len(devices)
+    fig, axs = plt.subplots(Nrows, Ncols, 
+                            figsize=(nature_single*Ncols, nature_single*Nrows))
+     
+    for k, key in enumerate(devices) : # flatten in case of 2D array
+        # For each device we ask for the transistor example IV
+        df_iv = devices[key].transistorIV_example(**kwargs)
+        df_iv.plot(subplots=False, ax=axs[k], sharex=False, sharey=False,
+                x = 'Vgate', y = 'Current', xlabel='Vgate (V)', ylabel='Current (uA)',
+                title=key)
+        axs[k].set_ylim(0,10)
     
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
@@ -723,4 +904,12 @@ def visualize_LED_efficiency(example) :
     ax.set_xscale('log')    
     ax.grid('True')
     plt.tight_layout()
-                          
+               
+def save_plot(fig, filename, plot_path='plots'):
+    import os
+    # Check for folder, otherwise create
+    if not os.path.isdir(plot_path) :
+        os.mkdir(plot_path)
+    # Save the figure 
+    fig.savefig(os.path.join(plot_path, filename + '.png'),
+                bbox_inches='tight', dpi=300)           

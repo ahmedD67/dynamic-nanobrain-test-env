@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.8
+#       jupytext_version: 1.13.0
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -31,11 +31,20 @@ from context import logger
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 
 # %% [markdown]
-# ### 1. Define the layers
+# ### 1. Define the broadcasting channels of the network
+# This is done by creating a list of the channel names. The names are arbitrary and can be set by the user, such as 'postive', 'negative' or explicit wavelenghts like '870 nm', '700 nm'. Here I chose the colors 'red' and 'blue'.
+
+# %%
+channel_list = ['blue','red']
+# Automatically generate the object that handles them
+channels = {channel_list[v] : v for v in range(len(channel_list))}
+
+# %% [markdown]
+# ### 2. Define the layers
 # Define the layers of nodes in terms of how they are connected to the channels. Layers and weights are organized in dictionaries. The input and output layers do not need to be changed, but for the hidden layer we need to specify the number of nodes N and assign the correct channels to the input/output of the node.
 
 # %%
-# Create layers ordered from 0 organized in a dictionary. Arbitrary labels can be used, i.e. 'TB1','CPU4' etc.
+# Create layers ordered from 0 to P organized in a dictionary
 layers = {} 
 # An input layer automatically creates on node for each channel that we define
 layers[0] = nw.InputLayer(N=1)
@@ -46,9 +55,7 @@ layers[2] = nw.HiddenLayer(N=1, output_channel='red' ,excitation_channel='blue',
 layers[3] = nw.OutputLayer(N=1) # similar to input layer
 
 # %% [markdown]
-# ### 2. Define abstract connections between layers
-# First, we define which layers are connected to which. The explicit weights
-# are set in the next step.
+# ### 3. Define existing connections between layers
 # The weights are set in two steps. 
 # First the connetions between layers are defined. This should be done using the keys defined for each layer above, i.e. 0, 1, 2 ... for input, hidden and output layers, respectively. The `connect_layers` function returns a weight matrix object that we store under a chosen key, for example `'inp->hid'`.
 # Second, the specific connections on the node-to-node level are specified using the node index in each layer
@@ -56,32 +63,28 @@ layers[3] = nw.OutputLayer(N=1) # similar to input layer
 # %%
 # Define the overall connectivity
 weights = {}
-# The syntax is connect_layers(from_layer, to_layer, layers, channel)
+# The syntax is connect_layers(from_layer, to_layer, layers, channels)
 weights['inp->hd0'] = nw.connect_layers(0, 1, layers, channel='blue')
 weights['hd0->hd1'] = nw.connect_layers(1, 2, layers, channel='blue')
 weights['hd0->out'] = nw.connect_layers(1, 3, layers, channel='blue')
 # Backwards connection from the memory
 weights['hd1->hd0'] = nw.connect_layers(2, 1, layers, channel='red')
 
-# %% [markdown]
-# ### 3. Define the specific connections
-# Here, the specific connections on the node-to-node level are specified using the node index in each layer.
-# Weights can also be set using a matrix (a bit boring here but possible)
-
-#%%
 # Define the specific node-to-node connections in the weight matrices
-# -----------------------------------------
+low_weight =  1.0 # 0.02
+# The syntax is connect_nodes(from_node, to_node, channel=label, weight=value in weight matrix)
+self_inhib = 1.0
+# Draw a ring network with Nring nodes (Nring defined above)
+
 # Input to first ring layer node
 weights['inp->hd0'].connect_nodes(0 ,0,weight=1.0) # channels['blue']=1
 #weights['inp->hd0'].connect_nodes(channels['red'] ,0, channel='red', weight=1.0) # channels['blue']=1
 # Hidden layer connections
-weights['hd0->hd1'].connect_nodes(0 ,0 , weight=1.0) 
+weights['hd0->hd1'].connect_nodes(0 ,0 , weight=self_inhib) 
 # Add damping connection
-weights['hd1->hd0'].connect_nodes(0 ,0 , weight=1.0)    
-# Connect to output, we can also use matrices
-import numpy as np
-weight_mat = np.array([[0.9]])
-weights['hd0->out'].set_W(weight_mat)
+weights['hd1->hd0'].connect_nodes(0 ,0 , weight=self_inhib)    
+# Connect to output
+weights['hd0->out'].connect_nodes(0, 0, weight=0.9)
 
 
 # %% [markdown]
@@ -111,11 +114,10 @@ plotter.visualize_network(layers, weights, layout='shell',
 # Specify two types of devices for the hidden layer
 # 1. Propagator (standard parameters)
 propagator = physics.Device('../parameters/device_parameters.txt')
-
 propagator.print_parameter('Rstore')
 # 2. Memory (modify the parameters)
 memory = physics.Device('../parameters/device_parameters.txt')
-memory.set_parameter('Rstore',2e7) # Ohms, original value us 2e6 Ohms
+memory.set_parameter('Rstore',2e7)
 memory.print_parameter('Rstore')
 
 # %%
@@ -135,88 +137,11 @@ print(f'Imax is found to be {Imax} nA')
 # %%
 # Specify an exciting current square pulse and a constant inhibition
 # Pulse train of 1 ns pulses
-t_blue = [(5.0,15.0)]#, (255.0,455.0)] # 
+t_blue = [(6.0,8.0), (11.0,13.0), (16.0,18.0)] # at 6 ns, 11 ns, and 16 ns
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
 layers[0].set_input_vector_func(func_handle=physics.square_pulse, func_args=(t_blue, 1.0*Imax))
 
-# %% [markdown]
-# Produce Bode plots to determine what our frequency cutoff will be
-
-# %%
-# Setup the gain function
-eigvals = propagator.setup_gain(propagator.gammas)
-
-# The eigenvalues
-print('System eigenvalues:')
-k=0
-for l in eigvals :
-    print(f'eig[{k}]={l:.2f} ns^-1 ')
-    k+=1
-# Regarding the eigenvalues, eig[0]=-25.81 ns^-1, eig[1]=-5.00 ns^-1, eig[2]=-0.19 ns^-1
-# eig[1] regards the charge collecting subsystem, this is their RC constant
-# eig[0] regards the exchange between the collectors and the storage, I believe. For A33=20 it's zero
-# eig[2] regards the time scale of the storage unit, the longest timescale in the system.
-    
-# PUT THIS IN THE PLOTTER MODULE
-import numpy as np
-# Visualize the response function 
-Ns = 100
-# Units are already in GHz so this creates a space from 1 MHz to 10 GHz
-s_exp = np.linspace(-5,1,Ns)
-s = 1j*10**s_exp
-
-# Sample the gain function
-G11, _ = propagator.gain(s,eigvals,propagator.gammas)
-
-mag_G11 = np.absolute(G11) / np.absolute(G11[0])
-arg_G11 = np.angle(G11)
-
-mag_G11_dB = 20*np.log10(mag_G11)
-
-# %%
-# Produce Bode plots of the results
-# Define parameters
-my_dpi = 300
-prop_cycle = plt.rcParams['axes.prop_cycle']
-colors = prop_cycle.by_key()['color']
-
-# Figure sizes
-inchmm = 25.4
-nature_single = 89.0 / 25.4
-nature_double = 183.0 / 25.4
-nature_full = 247.0 / 25.4
-
-# Plot options
-font = {'family' : 'sans',
-        'weight' : 'normal',
-        'size'   : 12}
-plt.rc('font', **font)
-
-fig, (ax1, ax2) = plt.subplots(2,1,figsize=(nature_double,nature_single),sharex=True)
-
-f_min = abs(s[0])
-plot_f_max = 3.0 # GHz
-
-ax1.plot(abs(s),mag_G11_dB)
-ax1.plot([f_min,plot_f_max],[-3,-3],'k--')
-ax1.grid('True')
-ax1.set_xscale('log')
-ax1.set_title('Bode plots for dynamic node')
-#ax1.set_xlabel('Frequency (GHz)')
-ax1.set_ylabel('|G11|/|G11[0]| (dB)')
-ax1.set_ylabel('|H| (dB)')
-ax1.set_xlim(f_min,plot_f_max)
-ax1.set_ylim(-20,2)
-
-ax2.plot(abs(s),arg_G11*180/np.pi)
-ax2.grid('True')
-#ax2.set_xscale('log')
-ax2.set_xlabel('Frequency (GHz)')
-ax2.set_ylabel('Phase (radians)')
-ax2.set_ylim(-180,10)
-
-plt.show()
 
 # %% [markdown]
 # ### 6. Evolve in time
@@ -224,17 +149,17 @@ plt.show()
 # %%
 # Start time t, end time T
 t = 0.0
-T = 100.0 # ns
+T = 20.0 # ns
 # To sample result over a fixed time-step, use savetime
-savestep = 1.0
+savestep = 0.1
 savetime = savestep
 # These parameters are used to determine an appropriate time step each update
 dtmax = 0.1 # ns 
-dVmax = 0.001 # V
+dVmax = 0.005 # V
 
 nw.reset(layers)
 # Create a log over the dynamic data
-time_log = logger.Logger(layers) # might need some flags
+time_log = logger.Logger(layers,channels) # might need some flags
 
 start = time.time()
 
@@ -307,7 +232,3 @@ plotter.visualize_transistor(propagator.transistorIV_example())
 plotter.visualize_LED_efficiency(propagator.eta_example(propagator.eta_ABC))
 
 # %%
-tau_memory = memory.calc_tau_gate() # 0.056 ns
-tau_propagator = propagator.calc_tau_gate()
-gammas_memory = memory.calc_gammas()
-gammas_propagator = propagator.calc_gammas()
