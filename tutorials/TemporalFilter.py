@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import time
 
 # load the modules specific to this project
-from context import network as nw
+from context import networker as nw
 from context import physics
 from context import timemarching as tm
 from context import plotter
@@ -133,9 +133,9 @@ print(f'Unity coupling coefficient calculated as unity_coeff={unity_coeff:.4f}')
 print(f'Imax is found to be {Imax} nA')
 
 # %%
-# Specify an exciting current square pulse and a constant inhibition
-# Pulse train of 1 ns pulses
-t_blue = [(5.0,15.0)]#, (255.0,455.0)] # 
+# Specify an exciting current pulse train of squares
+# Pulse train of 2 ns pulses
+t_blue = [(6.0,8.0),(11.0,13.0),(16.0,18.0)]#, (255.0,455.0)] # 
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
 layers[0].set_input_vector_func(func_handle=physics.square_pulse, func_args=(t_blue, 1.0*Imax))
@@ -224,7 +224,7 @@ plt.show()
 # %%
 # Start time t, end time T
 t = 0.0
-T = 100.0 # ns
+T = 20.0 # ns
 # To sample result over a fixed time-step, use savetime
 savestep = 1.0
 savetime = savestep

@@ -24,7 +24,7 @@
 import time
 
 # load the modules specific to this project
-from context import network as nw
+from context import networker as nw
 from context import physics
 from context import timemarching as tm
 from context import plotter
