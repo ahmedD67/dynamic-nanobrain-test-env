@@ -39,7 +39,7 @@ class TravelLog :
         self.column_labels = self.columnnames()
         
     def columnnames(self) :
-        names=['Time','x','y','vx','vy','heading','motor']
+        names=['Time','x','y','vx','vy','heading']
         return names
         
     def add_tstep(self,t,x,v,heading,motor) :

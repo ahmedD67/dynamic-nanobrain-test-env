@@ -412,7 +412,7 @@ def plot_weights(weights, colormap='viridis', savefig=False) :
         # Get some data, sources and targets
         weight_mat = np.copy(weights[key].W)
         # Normalize
-        print(key)
+        #print(key)
         norm = weight_mat.max()
         weight_mat /= norm
         
@@ -629,7 +629,7 @@ def subplot_trace(target, res, layer, attr, titles) :
     if layer == 'CPU1' :
         columns.insert(0,columns.pop(-1))
     
-    print(columns)
+    #print(columns)
     
     if columns[0][3] == 'V' :
         ylabel = 'Voltage (V)' 
