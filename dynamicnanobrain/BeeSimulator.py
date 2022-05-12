@@ -10,7 +10,8 @@ import numpy as np
 
 # %%
 
-import trialflight
+import beesim.trialflight as trials 
+import beesim.beeplotter as beeplotter
 
 def analyse(N, param_dict):
     """Iterates through param dictionary, running batches of trials according to the param dictionary"""
@@ -25,7 +26,7 @@ def analyse(N, param_dict):
             if k != 'n' and v[i] != None:
                 kwargs[k] = v[i]
                         
-        OUT, INB = trialflight.generate_dataset(N=N, **kwargs)
+        OUT, INB = trials.generate_dataset(N=N, **kwargs)
         
         if 'T_outbound' in kwargs:
             T_outbound = kwargs['T_outbound']
@@ -38,7 +39,7 @@ def analyse(N, param_dict):
 
         # Closest position to nest within return part. Use my new one 
         # TODO: Continue here
-        min_d, min_d_sigma, search_d, search_d_sigma= trialflight.analyze_inbound(INB, T_outbound,T_inbound)
+        min_d, min_d_sigma, search_d, search_d_sigma= trials.analyze_inbound(INB, T_outbound,T_inbound)
 
         min_dists.append(min_d)
         min_dist_stds.append(min_d_sigma)
@@ -48,7 +49,7 @@ def analyse(N, param_dict):
     return min_dists, min_dist_stds, search_dists, search_dist_stds
 
 #%%
-N = 3 #100
+N = 5 #100
 N_dists = 3
 #distances = np.round(10 ** np.linspace(1, 4, N_dists)).astype('int')
 distances = np.round(10 ** np.linspace(1, 3, N_dists)).astype('int')
@@ -79,14 +80,18 @@ for param_dict in param_dicts:
     search_dist_stds.append(search_dist_std)
     
 #%%
-import beeplotter
 
-beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, memupdate_vals, 'Memory update')
+fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, memupdate_vals, 'Memory update')
+fig.show()
+
+#%%
+fig, ax = beeplotter.plot_distance_v_param(search_dists_l, search_dist_stds, distances, memupdate_vals, 'Memory update')
+fig.show()
 
 #%% Single flight can be generated like this
 T=100
-OUT, INB = trialflight.generate_dataset(T,T,2)
+OUT, INB = trials.generate_dataset(T,T,2)
 
 # Output is after statistical analysis
-min_dist, min_dist_std, search_dist, search_dist_std = trialflight.analyze_inbound(INB,T,T)
+min_dist, min_dist_std, search_dist, search_dist_std = trials.analyze_inbound(INB,T,T)
 

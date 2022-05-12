@@ -19,14 +19,18 @@
 
 # %%
 import pandas as pd
-import os
 import matplotlib.pyplot as plt
 
 # Local imports
-import trialflight
-import stone
-from context import physics
-from context import plotter
+from context import dynamicnanobrain
+# core modules
+import dynamicnanobrain.core.plotter as plotter
+import dynamicnanobrain.core.physics as physics
+# beesim modules
+import dynamicnanobrain.beesim.stone as stone
+import dynamicnanobrain.beesim.trialflight as trials
+import dynamicnanobrain.beesim.beeplotter as beeplotter
+
 
 plt.rcParams['figure.dpi'] = 200 # 200 e.g. is really fine, but slower
 
@@ -110,14 +114,14 @@ my_nw.show_devices(Vleak_dict, Vstart=-0.7)
 # %%
 Tout=1000
 Tinb=1000
-out_res, inb_res, out_travel, inb_travel = trialflight.run_trial(my_nw,Tout,Tinb)
+out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,Tout,Tinb)
 
 # %% ,arkdown [markdown]
 # ## Analyze the result
 # First, check the closest position to the nest for the inbound flight. Then make a few plots to illustrate the process.
 
 # %%
-min_dist, search_width = trialflight.analyze_inbound(inb_travel,Tout,Tinb)
+min_dist, _, search_width, _ = trials.analyze_inbound(inb_travel,Tout,Tinb)
 
 # %%
 import warnings
@@ -126,7 +130,7 @@ warnings.filterwarnings('ignore',category=UserWarning) # get rid of some red tex
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 # 1. Combined trace plot
 comb_res = pd.concat([out_res,inb_res],ignore_index=True)
-fig,_ = plotter.plot_traces(comb_res, layers=['CL1','TB1','TN2','CPU4','Pontine','CPU1'],attr='Pout',titles=True)
+fig,_ = beeplotter.plot_traces(comb_res, layers=['CL1','TB1','TN2','CPU4','Pontine','CPU1'],attr='Pout',titles=True)
 
 # %%
 # Plot the combined traveled route

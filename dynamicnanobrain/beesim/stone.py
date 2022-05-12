@@ -5,10 +5,15 @@ Created on Tue Mar  8 15:53:48 2022
 
 @author: dwinge
 """
+import time
+
 import numpy as np
 import pandas as pd
-from context import network as nw
-from context import plotter
+from ..core import networker as nw
+from ..core import plotter
+from ..core import logger
+from ..core import timemarching as tm
+
 
 N_TB1=8
 N_CL1=16
@@ -214,11 +219,7 @@ class StoneNetwork :
                initial_pos=(0,0),initial_vel=(0,0),initial_heading=0,
                a=0.1, drag=0.15, updateheading_m=default_update_m,
                printdiag=False) : 
-        
-        from context import logger
-        from context import timemarching as tm
-        import time
-        
+               
         # Start time is t
         t=t0
         # These parameters are used to determine an appropriate time step each update

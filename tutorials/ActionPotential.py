@@ -29,25 +29,16 @@ import matplotlib.pyplot as plt
 import time
 
 # load the modules specific to this project
-from context import networker as nw
-from context import physics
-from context import timemarching as tm
-from context import plotter
-from context import logger
+from context import dynamicnanobrain
+import dynamicnanobrain.core.networker as nw
+import dynamicnanobrain.core.timemarching as tm
+import dynamicnanobrain.core.plotter as plotter
+import dynamicnanobrain.core.physics as physics
 
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 
 # %% [markdown]
-# ### 1. Define the broadcasting channels of the network
-# This is done by creating a list of the channel names. The names are arbitrary and can be set by the user, such as 'postive', 'negative' or explicit wavelenghts like '870 nm', '700 nm'. Here I chose the colors 'red' and 'blue'.
-
-# %%
-channel_list = ['blue','red']
-# Automatically generate the object that handles them
-channels = {channel_list[v] : v for v in range(len(channel_list))}
-
-# %% [markdown]
-# ### 2. Define the layers
+# ### 1. Define the layers
 # Define the layers of nodes in terms of how they are connected to the channels. Layers and weights are organized in dictionaries. The input and output layers do not need to be changed, but for the hidden layer we need to specify the number of nodes N and assign the correct channels to the input/output of the node.
 
 # %%

@@ -22,11 +22,12 @@ import matplotlib.pyplot as plt
 import time
 
 # load the modules specific to this project
-from context import networker as nw
-from context import physics
-from context import timemarching as tm
-from context import plotter
-from context import logger
+from context import dynamicnanobrain
+import dynamicnanobrain.core.networker as nw
+import dynamicnanobrain.core.timemarching as tm
+import dynamicnanobrain.core.plotter as plotter
+import dynamicnanobrain.core.physics as physics
+import dynamicnanobrain.core.logger as logger
 
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 

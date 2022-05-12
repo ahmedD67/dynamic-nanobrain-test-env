@@ -18,17 +18,17 @@
 # %load_ext autoreload
 # %autoreload 2
 
-import networkx as nx
 import matplotlib.pyplot as plt
 import time
 
 # modules specific to this project
-import network as nw
-import physics
-import timemarching as tm
-import plotter
-import logger
-
+# load the modules specific to this project
+from context import dynamicnanobrain
+import dynamicnanobrain.core.networker as nw
+import dynamicnanobrain.core.timemarching as tm
+import dynamicnanobrain.core.plotter as plotter
+import dynamicnanobrain.core.physics as physics
+import dynamicnanobrain.core.logger as logger
 
 # %% [markdown]
 # ### 1. Define the broadcasting channels of the network

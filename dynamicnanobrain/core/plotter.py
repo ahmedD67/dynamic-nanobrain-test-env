@@ -585,7 +585,7 @@ def subplot_node(target, res, node, plot_all=False) :
         pass
     
     
-    target.set_title('Node '+node)
+    target.set_title('Node '+node[:-1]) # Now we exclude the dash again
     
 def subplot_attr(target, res, attr) :
     """
@@ -620,45 +620,7 @@ def subplot_attr(target, res, attr) :
              xlabel='Time (ns)', ylabel=ylabel, label=short_names)
     
     target.set_title(attr)
-    
-def subplot_trace(target, res, layer, attr, titles) :
-    # Get the relevant nodes
-    columns = [name for name in res.columns if (attr in name) and (layer in name)]
-    
-    # If we are plotting CPU1, we permute the one step forward
-    if layer == 'CPU1' :
-        columns.insert(0,columns.pop(-1))
-    
-    #print(columns)
-    
-    if columns[0][3] == 'V' :
-        ylabel = 'Voltage (V)' 
-    else:
-        ylabel = 'Current (nA)'
-    
-    #TIME, INDEX = np.meshgrid(res['Time'])
-    node_idx = [x+1 for x in range(0,len(columns))]
-    # Need to copy as assigned by reference
-    node_labels = node_idx.copy()
-    if layer == 'CPU1' :
-        node_labels[0] = 'CPU1b_9'
-        node_labels[-1] = 'CPU1b_8'
-        
-    import numpy as np
-    TIME, INDEX = np.meshgrid(res['Time'].values,node_idx)
-    # Produce a 2D plot of values over time
-    im = target.pcolormesh(TIME,INDEX,res[columns].values.transpose(),
-                           cmap='viridis', rasterized=True,
-                           shading='auto')
-    
-    plt.colorbar(im, ax=target, label=ylabel)  
-    target.set_yticks(np.array(node_idx))
-    target.set_yticklabels(node_labels)
-    target.set_ylabel('Node idx')
-    target.set_xlabel('Time (ns)')
-    if titles :
-        target.set_title(layer)
-    
+
 def subplot_chain(target, res, nodes, data_label) :
     columns = [name for node in nodes for name in res.columns if (node in name and data_label in name)]
     short_names = [name[:2] for name in columns]
@@ -731,38 +693,7 @@ def plot_nodes(res, nodes, plot_all=False, onecolumn=False, doublewidth=True,
         
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
-    
-def plot_traces(res, layers, attr, onecolumn=False, doublewidth=True,
-                time_interval=None, titles=False)    :
-           
-    Nrows = len(layers)
-    Ncols = 1 # Put traces with a shared x-axis
-    if doublewidth : 
-        nature_width = nature_double 
-    else :  
-        nature_width = nature_single
         
-    fig, axs = plt.subplots(Nrows, Ncols, 
-                            figsize=(nature_width*Ncols, 0.5*nature_single*Nrows),
-                            sharex=True) 
-    
-    # Select the approperiate time interval
-    if time_interval is not None :
-        select_res = res[(res["Time"]>=time_interval[0]) & (res["Time"]<=time_interval[1])]
-    else : 
-        select_res = res
-        
-    if Nrows > 1 :
-        for k, ax in enumerate(axs.flatten()) :
-            subplot_trace(ax, select_res, layers[k], attr, titles)
-    else:
-        subplot_trace(axs, select_res, layers[0], attr, titles)
-        
-    plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
-    plt.tight_layout()
-    
-    return fig, axs
-    
 
 def plot_attributes(res, attr, onecolumn=False, doublewidth=True) :
     """

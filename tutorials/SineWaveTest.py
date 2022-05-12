@@ -18,16 +18,16 @@
 # %load_ext autoreload
 # %autoreload 2
 
-import networkx as nx
 import matplotlib.pyplot as plt
 import time
 
 # modules specific to this project
-from context import network as nw
-from context import physics
-from context import timemarching as tm
-from context import plotter
-from context import logger
+from context import dynamicnanobrain
+import dynamicnanobrain.core.networker as nw
+import dynamicnanobrain.core.timemarching as tm
+import dynamicnanobrain.core.plotter as plotter
+import dynamicnanobrain.core.physics as physics
+import dynamicnanobrain.core.logger as logger
 
 # %% [markdown]
 # ### 1. Define the broadcasting channels of the network
@@ -45,14 +45,13 @@ channels = {channel_list[v] : v for v in range(len(channel_list))}
 # %%
 # Create layers ordered from 0 to P organized in a dictionary
 layers = {} 
-Nring=5
-# An input layer automatically creates on node for each channel that we define
-layers[0] = nw.InputLayer(input_channels=channels)
+# An input layer 
+layers[0] = nw.InputLayer(N=1)
 # Forward signal layer
 layers[1] = nw.HiddenLayer(N=1, output_channel='blue',excitation_channel='blue',inhibition_channel='red')
 # Inhibiting memory layer
 layers[2] = nw.HiddenLayer(N=1, output_channel='red' ,excitation_channel='blue',inhibition_channel='red')
-layers[3] = nw.OutputLayer(output_channels=channels) # similar to input layer
+layers[3] = nw.OutputLayer(N=1) 
 
 # %% [markdown]
 # ### 3. Define existing connections between layers
@@ -64,15 +63,15 @@ layers[3] = nw.OutputLayer(output_channels=channels) # similar to input layer
 # Define the overall connectivity
 weights = {}
 # The syntax is connect_layers(from_layer, to_layer, layers, channels)
-weights['inp->hd0'] = nw.connect_layers(0, 1, layers, channels)
+weights['inp->hd0'] = nw.connect_layers(0, 1, layers, channel='blue')
 #weights['inp->hd1'] = nw.connect_layers(0, 2, layers, channels)
 #weights['hd0->hd1'] = nw.connect_layers(1, 2, layers, channels)
-weights['hd0->out'] = nw.connect_layers(1, 3, layers, channels)
+weights['hd0->out'] = nw.connect_layers(1, 3, layers, channel='blue')
 #weights['hd1->out'] = nw.connect_layers(2, 3, layers, channels)
 # Backwards connection from the memory
 #weights['hd1->hd0'] = nw.connect_layers(2, 1, layers, channels)
 # Teacher forcing connection back into the network
-weights['out->hd1'] = nw.connect_layers(3, 2, layers, channels)
+weights['out->hd1'] = nw.connect_layers(3, 2, layers, channel='blue')
 # Define the specific node-to-node connections in the weight matrices
 low_weight =  1.0 # 0.02
 # The syntax is connect_nodes(from_node, to_node, channel=label, weight=value in weight matrix)
@@ -80,8 +79,8 @@ low_weight =  1.0 # 0.02
 # Draw a ring network with Nring nodes (Nring defined above)
 
 # Input to first ring layer node
-weights['inp->hd0'].connect_nodes(channels['blue'] ,0, channel='blue', weight=1.0) # channels['blue']=1
-weights['inp->hd0'].connect_nodes(channels['red'] ,0, channel='red', weight=1.0) # channels['blue']=1
+weights['inp->hd0'].connect_nodes(0, 0, weight=1.0) # channels['blue']=1
+#weights['inp->hd0'].connect_nodes(0, 0, weight=1.0) # channels['blue']=1
 # Connect second hidden layer
 #weights['inp->hd1'].connect_nodes(channels['blue'] ,0, channel='blue', weight=1.0) # channels['blue']=1
 # Output layer connections back to network
@@ -89,7 +88,7 @@ weights['inp->hd0'].connect_nodes(channels['red'] ,0, channel='red', weight=1.0)
 # Add damping connection
 #weights['hd1->hd0'].connect_nodes(0 ,0 , channel='red', weight=low_weight)    
 # Connect to output
-weights['hd0->out'].connect_nodes(0, channels['blue'], channel='blue', weight=0.9)
+weights['hd0->out'].connect_nodes(0, 0, weight=0.9) # 0.9 makes it easier to distinguish lines in plots
 #weights['hd1->out'].connect_nodes(0, channels['red'], channel='red', weight=0.9)
 
 
@@ -117,11 +116,11 @@ plotter.visualize_network(layers, weights, layout='shell', show_edge_labels=Fals
 # %%
 # Specify two types of devices for the hidden layer
 # 1. Propagator (standard parameters)
-propagator = physics.Device('device_parameters.txt')
+propagator = physics.Device('../parameters/device_parameters.txt')
 propagator.print_parameter('Cstore')
 #propagator.set_parameter('Rstore',1e6)
 # 2. Memory (modify the parameters)
-memory = physics.Device('device_parameters.txt')
+memory = physics.Device('../parameters/device_parameters.txt')
 #memory.set_parameter('Rstore',1e6)
 #memory.set_parameter('Cstore',2e-15)
 # a 3e-15 F capacitor can be build by 800x900 plates 20 nm apart
@@ -282,10 +281,10 @@ t_red = [(8.0,9.0), (12.0,13.0)] # at 6 ns, 11 ns, and 16 ns
 I_red = 0.0 # nA
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
-layers[0].set_input_func(channel='blue',func_handle=step_freq, func_args=(Imax,))
+layers[0].set_input_func_per_node(0,func_handle=step_freq, func_args=(Imax,))
 # Use the costant function to specify the inhibition from I0 to H0
 #layers[0].set_input_func(channel='red', func_handle=physics.constant, func_args=I_red)
-layers[0].set_input_func(channel='red', func_handle=physics.square_pulse, func_args=(t_red, I_red))
+#layers[0].set_input_func(channel='red', func_handle=physics.square_pulse, func_args=(t_red, I_red))
 
 # %% [markdown]
 # ### 6. Evolve in time
@@ -346,7 +345,7 @@ plotter.plot_nodes(result, nodes)
 # %%
 # Variable G contains a graph object descibing the network
 G = plotter.retrieve_G(layers, weights)
-plotter.plot_chainlist(result,G,'I1','O1')
+plotter.plot_chainlist(result,G,'I0','O0')
 
 # %% [markdown]
 # Plot specific attributes
@@ -361,8 +360,6 @@ plotter.plot_attributes(result, attr_list)
 # %%
 print(result.columns)
 
-# %%
-plotter.visualize_dynamic_result(result, ['I0-Iout-red','I1-Iout-blue'])
 
 # %%
 # The unit of H0-Iexc is V/ns, which is different compared to the other quantaties. 

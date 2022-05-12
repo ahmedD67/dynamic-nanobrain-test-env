@@ -12,18 +12,22 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 import pickle
+from scipy.interpolate import interp1d
 
-# Local imports
+# Imports from the code of Tom Stone
 import pathintegration.trials as path_trials
 import pathintegration.cx_rate as path_cxrate
 import pathintegration.cx_basic as path_cxbasic
 
-import stone
-from context import physics
-from context import plotter
-from scipy.interpolate import interp1d
+from . import stone
+from . import beeplotter
+from ..core import physics
+from ..core import plotter
 
-DATA_PATH='data'
+# These paths are a bit tricky, as they will be relative to the importing file
+# In the current case, they become relative to BeeSimulator one folder above
+DATA_PATH='../data/beesim'
+PLOT_PATH='../plots/beesim'
 
 def analyze_inbound(df, Tout, Tinb, search_fraction=0.4) :
     
@@ -199,11 +203,11 @@ def save_dataset(OUT, INB, T_outbound, T_inbound, N,
     #(OUT, INB).to_pickle(os.path.join(DATA_PATH, filename))
     
 
-def one_flight_results(out_res,inb_res,out_travel, inb_travel, sim_name, plot_path='plots'):
+def one_flight_results(out_res,inb_res,out_travel, inb_travel, sim_name, plot_path=PLOT_PATH):
     # Create plots
     # 1. Combined trace plot
     comb_res = pd.concat([out_res,inb_res],ignore_index=True)
-    fig,_ = plotter.plot_traces(comb_res, layers=['CL1','TB1','TN2','CPU4','Pontine','CPU1'],attr='Pout',titles=True)
+    fig,_ = beeplotter.plot_traces(comb_res, layers=['CL1','TB1','TN2','CPU4','Pontine','CPU1'],attr='Pout',titles=True)
     # Here we need to save the figure
     plotter.save_plot(fig,'traces_'+sim_name,plot_path)
        
@@ -225,7 +229,7 @@ def one_flight_results(out_res,inb_res,out_travel, inb_travel, sim_name, plot_pa
     plt.close('all')
 
 def generate_dataset(T_outbound=1500, T_inbound=1500,N=1000,
-                     save=True, make_plots=True, **kwargs):
+                     save=True, make_plots=True, plot_path=PLOT_PATH, **kwargs):
     try:
         OUT, INB = load_dataset(T_outbound, T_inbound, N,
                                            **kwargs)
@@ -241,8 +245,10 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=1000,
         
         # Create somewhere to store figures
         if make_plots :
+            # Make sure pyplot in in non-interactive mode
+            plt.ioff()
             dirname = generate_figurename(T_outbound,T_inbound,N,**kwargs)
-            plot_dir = os.path.join('plots',dirname)
+            plot_dir = os.path.join(plot_path,dirname)
             if not os.path.isdir(plot_dir) : # check first for existance
                 os.mkdir(plot_dir)
         
