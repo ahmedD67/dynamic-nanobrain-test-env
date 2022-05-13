@@ -6,8 +6,8 @@ Created on Thu Nov 11 09:10:12 2021
 @author: dwinge
 """
 import numpy as np
-from context import network as nw
-from context import plotter
+from ..core import networker as nw
+from ..core import plotter
 
 class EchoStateNetwork :
     
@@ -88,12 +88,12 @@ class EchoStateNetwork :
         
         layers = {} 
         # An input layer automatically creates on node for each channel that we define
-        layers[0] = nw.InputLayer(input_channels=channels)
+        layers[0] = nw.InputLayer(N=len(channels))
         # Two intertwined hidden layers, one excitatiory, one inhibitory
         layers[1] = nw.HiddenLayer(N//2, output_channel='blue',excitation_channel=('blue','green'),inhibition_channel='red')
         layers[2] = nw.HiddenLayer(N//2, output_channel='red' ,excitation_channel=('blue','green'),inhibition_channel='red')
         # Output layer
-        layers[3] = nw.OutputLayer(output_channels=channels) 
+        layers[3] = nw.OutputLayer(N=len(channels))
         
         # Define the overall connectivity
         weights = {}

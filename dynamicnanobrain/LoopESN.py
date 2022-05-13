@@ -21,9 +21,9 @@
 import matplotlib.pyplot as plt
 # modules specific to this project
 #import context
-from context import physics
-from context import plotter
-import esn
+from dynamicnanobrain.core import physics
+from dynamicnanobrain.core import plotter
+from dynamicnanobrain.esn import esn
 
 Nreservoir = 40
 SEED=47

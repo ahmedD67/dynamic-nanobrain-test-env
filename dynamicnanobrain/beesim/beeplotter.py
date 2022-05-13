@@ -84,7 +84,7 @@ def plot_traces(res, layers, attr, onecolumn=False, doublewidth=True,
     return fig, axs
 
 def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
-                          param_name,
+                          param_name,ylabel='Distance (steps)',
                           ax=None, label_font_size=11, unit_font_size=10,
                           title=None, x_lim=10000, y_lim=300):
     fig = None
@@ -112,7 +112,7 @@ def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
     ax.set_title(title, fontsize=label_font_size)
     ax.tick_params(labelsize=unit_font_size)
     ax.set_xlabel('Route length (steps)', fontsize=label_font_size)
-    ax.set_ylabel('Distance (steps)', fontsize=label_font_size)
+    ax.set_ylabel(ylabel, fontsize=label_font_size)
 
     handles, labels = ax.get_legend_handles_labels()
 

@@ -75,7 +75,7 @@ class HiddenLayer(Layer) :
                  device=None, Vthres=1.2) :
         """
         Constructor for hidden layers.
-
+    
         Parameters
         ----------
         N : integer
@@ -90,11 +90,11 @@ class HiddenLayer(Layer) :
             Assign a device to the nodes. The default is None.
         Vthres : float, optional
             Clipping voltage for the exciting/inhibiting voltage. The default is 1.2 V.
-
+    
         Returns
         -------
         None.
-
+    
         """
         
         Layer.__init__(self, N, layer_type='hidden')

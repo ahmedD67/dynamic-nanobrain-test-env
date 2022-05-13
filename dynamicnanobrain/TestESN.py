@@ -18,17 +18,11 @@
 # %load_ext autoreload
 # %autoreload 2
 
-import networkx as nx
 import matplotlib.pyplot as plt
-import time
 
-# modules specific to this project
-from context import network as nw
-from context import physics
-from context import timemarching as tm
-from context import plotter
-from context import logger
-import esn
+# modules specific to this script
+from dynamicnanobrain.core import physics
+from dynamicnanobrain.esn import esn
 
 
 Nreservoir = 40

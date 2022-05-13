@@ -36,7 +36,8 @@ author = 'David Winge'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc'
+    'sphinx.ext.autodoc',
+    'numpydoc'
 #    'sphinx.ext.epub3'
 ]
 
@@ -52,13 +53,19 @@ def setup(app):
 # Sort members by type
 autodoc_member_order = 'groupwise'
 
+# Allow for short doc strings
+numpydoc_show_class_members = False
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store','**tests**','Tutorials','setup.py']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store','**tests**','Tutorials','../setup.py', '../dynamicnanobrain/*ESN.py']
+
+# Index.rst is missing so try to add
+root_doc = 'modules'
 
 
 # -- Options for HTML output -------------------------------------------------
