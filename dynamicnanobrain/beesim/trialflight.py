@@ -10,15 +10,12 @@ Many of the methods have been adapted from Stone et al. 2017
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import os
 import pickle
 from scipy.interpolate import interp1d
 
-# Imports from the code of Tom Stone
-import pathintegration.trials as path_trials
-import pathintegration.cx_rate as path_cxrate
-import pathintegration.cx_basic as path_cxbasic
-
+from . import pathtrials
 from . import stone
 from . import beeplotter
 from ..core import physics
@@ -28,6 +25,37 @@ from ..core import plotter
 # In the current case, they become relative to BeeSimulator one folder above
 DATA_PATH='../data/beesim'
 PLOT_PATH='../plots/beesim'
+
+def angular_distance(a, b):
+    return (a - b + np.pi) % (2 * np.pi) - np.pi
+
+def analyze_angle(INB, radius=20):
+
+    # Turning point is first logged point in each inbound travel
+    x_turning_point = INB['x'].loc[:,0]
+    y_turning_point = INB['y'].loc[:,0]
+    
+    # Loop over each sample
+    N = INB['x'].index[-1][0]+1 # should choose last index
+    maxlen = INB['x'].index.max()[1]+1
+    dist_from_tp = np.zeros((maxlen,N))
+    for k in range(0,N) :
+        
+        dist_from_tp[:,k] = np.sqrt((INB['x'].loc[k] - x_turning_point[k])**2 +
+                                    (INB['y'].loc[k] - y_turning_point[k])**2)
+        
+    # Find the first point where we are distance of radius from turning point
+    # argmax gives first occurence when searching a boolean array
+    leaving_point = np.argmax(dist_from_tp > radius, axis=0) 
+    nest_angles = np.arctan2(-x_turning_point, - y_turning_point)
+    return_angles=np.zeros(N)
+    
+    for k in range(0,N) :
+        
+        return_angles[k] = np.arctan2(INB['x'].loc[k,leaving_point[k]] - x_turning_point[k],
+                                   INB['y'].loc[k,leaving_point[k]] - y_turning_point[k])
+        
+    return angular_distance(nest_angles, return_angles)
 
 def analyze_inbound(df, Tout, Tinb, search_fraction=0.4) :
     
@@ -83,29 +111,38 @@ def construct_out_travel(Tout,headings,velocity) :
     
     return out_travel
 
-def run_trial(trial_nw,Tout=1000,Tinb=1500, hupdate=0.00025,
-              inputscaling=1.0,noise=0.0, savestep=1.0) :
+def generate_straight_route(Tout, heading, velocity, offset=0.0) :
+    vx = velocity*np.sin(heading+offset)
+    vy = velocity*np.cos(heading+offset)
+    v_vec = np.ones((Tout,2))
+    v_vec[:,0] *=vx
+    v_vec[:,1] *=vy    
+    h_vec = np.ones(Tout)*heading
+    return h_vec,v_vec
     
-    # Generate route as Tom Stone did
-    headings, velocity = path_trials.generate_route(T=Tout, vary_speed=True)
+def run_trial(trial_nw,Tout=1000,Tinb=1500,
+              inputscaling=0.9,noise=0.1, savestep=1.0, 
+              straight_route=False, fix_heading=0.0, fix_velocity=0.7, offset=0.0,
+              **kwargs) :
+    
+    if straight_route :
+        headings, velocity = generate_straight_route(Tout, fix_heading, fix_velocity, offset)
+    else :
+        # Generate route as Tom Stone did
+        headings, velocity = pathtrials.generate_route(T=Tout, vary_speed=True)
     outbound_end_position = integrate_to_position(headings,velocity)
 
     out_travel = construct_out_travel(Tout, headings, velocity)
+        
+    # Generate signals cl1 and tn2 for all Tout time steps
+    tb1 = np.zeros(stone.N_TB1)
+    memory = np.zeros(stone.N_CPU4)
+    cl1 = np.zeros((Tout,stone.N_CL1))
+    tn2 = np.zeros((Tout,stone.N_TN2))
     
-    stone_cx = path_cxrate.CXRatePontin(noise=noise) # use default settings
-    
-    # Generate sig:nals cl1, tn1 and tn2 for all time steps
-    tb1 = np.zeros(path_cxbasic.N_TB1)
-    memory = np.zeros(path_cxbasic.N_CPU4)
-    cl1 = np.zeros((Tout,path_cxbasic.N_CL1))
-    tn1 = np.zeros((Tout,path_cxbasic.N_TN1))
-    tn2 = np.zeros((Tout,path_cxbasic.N_TN2))
-    cpu4 = np.zeros((Tout,path_cxbasic.N_CPU4))
-    tl2 =np.zeros((Tout,path_cxbasic.N_TL2))
-    cpu1 =np.zeros((Tout,path_cxbasic.N_CPU1))
-    
+    cx_pontine = pathtrials.get_cx_instance(noise)
     for k in range(Tout) :
-        tl2[k], cl1[k], tb1, tn1[k], tn2[k], memory, cpu4[k], cpu1[k], motor = path_trials.update_cells(headings[k], velocity[k], tb1, memory, stone_cx)
+        _, cl1[k], tb1, _, tn2[k], memory, _, _, _ = pathtrials.update_cells(headings[k], velocity[k], tb1, memory, cx_pontine)
 
     # Define interpolation functions to feed some pre-produced values into the network
     def cl1_input(scaling) :
@@ -115,26 +152,30 @@ def run_trial(trial_nw,Tout=1000,Tinb=1500, hupdate=0.00025,
         return interp1d(range(Tout), tn2*scaling, axis=0)
         
     # Setup the inputs for CL1 and TN1
-    trial_nw.specify_inputs('CL1', cl1_input)
-    trial_nw.specify_inputs('TN2', tn2_input)
+    trial_nw.specify_inputs('CL1', cl1_input, inputscaling)
+    trial_nw.specify_inputs('TN2', tn2_input, inputscaling)
 
     # Feed the network the correct input signals for the outbound travel
-    out_res = trial_nw.evolve(T=Tout,savestep=savestep)
+    out_res = trial_nw.evolve(T=Tout,savestep=savestep,
+                              inputscaling=inputscaling,
+                              noise=noise,
+                              **kwargs)
     
     # Let the network navigate the inbound journey
     inb_res, inb_travel = trial_nw.evolve(T=Tout+Tinb,reset=False,t0=Tout,inbound=True,
                                        initial_heading=headings[-1],
                                        initial_pos=outbound_end_position,
                                        initial_vel=velocity[-1],
-                                       #savestep=0.1,
-                                       updateheading_m=hupdate)
+                                       inputscaling=inputscaling,
+                                       noise=noise,
+                                       **kwargs)
 
     return out_res, inb_res, out_travel, inb_travel
 
-def setup_network(Rs=2e9, memupdate=0.0025, manipulate_shift=False, onset_shift=-0.1,
-                  cpu_shift=0.05) :
+def setup_network(Rs=2e11, memupdate=0.004, manipulate_shift=True, onset_shift=0.0,
+                  cpu_shift=-0.2,**kwargs) :
     
-    setup_nw = stone.StoneNetwork() 
+    setup_nw = stone.StoneNetwork(mem_update_h=memupdate,**kwargs) 
     # Setup the internal devices
     devices = {}
     devices['TB1']=physics.Device('../parameters/device_parameters.txt')
@@ -150,11 +191,13 @@ def setup_network(Rs=2e9, memupdate=0.0025, manipulate_shift=False, onset_shift=
     devices['Pontine']=physics.Device('../parameters/device_parameters.txt')
 
     if manipulate_shift :
-        devices["TB1"].p_dict['Vt'] = onset_shift
-        devices["CPU4"].p_dict['Vt'] = cpu_shift
-        devices["CPU1a"].p_dict['Vt'] = cpu_shift
-        devices["CPU1b"].p_dict['Vt'] = cpu_shift
-        devices["Pontine"].p_dict['Vt'] = cpu_shift
+        # Get the original Vt
+        Vt0 = devices['TB1'].p_dict['Vt']
+        devices["TB1"].p_dict['Vt'] = Vt0+onset_shift
+        devices["CPU4"].p_dict['Vt'] = Vt0+cpu_shift
+        devices["CPU1a"].p_dict['Vt'] = Vt0+cpu_shift
+        devices["CPU1b"].p_dict['Vt'] = Vt0+cpu_shift
+        #devices["Pontine"].p_dict['Vt'] = cpu_shift
 
     # Feed the devices into the network
     setup_nw.assign_device(devices, unity_key='TB1')
@@ -202,8 +245,42 @@ def save_dataset(OUT, INB, T_outbound, T_inbound, N,
         
     #(OUT, INB).to_pickle(os.path.join(DATA_PATH, filename))
     
+def downsample(df_x,df_t,t_sample) :
+    # create a 1D interpolation
+    f = interp1d(df_t, df_x)
+    t0 = df_t.iloc[0]
+    T = df_t.iloc[-1]
+    t_vec = np.arange(t0,T,t_sample)
+    return f(t_vec)     
 
-def one_flight_results(out_res,inb_res,out_travel, inb_travel, sim_name, plot_path=PLOT_PATH):
+def decode_position(cpu4_reshaped, cpu4_mem_gain):
+    """Decode position from sinusoid in to polar coordinates.
+    Amplitude is distance, Angle is angle from nest outwards.
+    Without offset angle gives the home vector.
+    Input must have shape of (2, -1)"""
+    signal = np.sum(cpu4_reshaped, axis=0)
+    # coefficient c1 for the fundamental frequency
+    fund_freq = np.fft.fft(signal)[1]
+    #angle = -np.angle(np.conj(fund_freq))
+    # add pi to account for TB1_1 being at np.pi
+    angle = -np.angle(fund_freq)
+    scale = 5e-4
+    distance = np.absolute(fund_freq) / cpu4_mem_gain * scale
+    return angle, distance
+
+def decode_cpu4(cpu4,cpu4_mem_gain=1.0):
+    """Shifts both CPU4 by +1 and -1 column to cancel 45 degree flow
+    preference. When summed single sinusoid should point home."""
+    cpu4_reshaped = cpu4.reshape(2, -1)
+    cpu4_shifted = np.vstack([np.roll(cpu4_reshaped[0], 1),
+                              np.roll(cpu4_reshaped[1], -1)])
+    
+    return decode_position(cpu4_shifted, cpu4_mem_gain)
+        
+def one_flight_results(out_res,inb_res,out_travel, inb_travel, sim_name, plot_path=PLOT_PATH, radius=20.,
+                       interactive=False, show_headings=False, decode_mem=True, cpu4_mem_gain=1.0):
+    if interactive :
+        plt.ion()
     # Create plots
     # 1. Combined trace plot
     comb_res = pd.concat([out_res,inb_res],ignore_index=True)
@@ -219,27 +296,58 @@ def one_flight_results(out_res,inb_res,out_travel, inb_travel, sim_name, plot_pa
     fig, ax = plt.subplots()
     out_travel.plot(x='x',y='y',style='purple',ax=ax,linewidth=0.5, label='Outbound')
     inb_travel.plot(x='x',y='y',style='g',ax=ax,linewidth=0.5, label='Inbound')
-    #path_plotter.plot_route(headings, velocity, Tout, 0,ax=ax)
+    # Decode cpu4 and plot memory vector 
+    if decode_mem :
+        cpu4 = get_cpu4activity(out_res)
+        angle, distance = decode_cpu4(cpu4,cpu4_mem_gain)
+        # This angle should point from final position to nest
+        ymem = distance*np.cos(angle) 
+        xmem = distance*np.sin(angle)
+        ax.plot(xmem,ymem,'o',color='orange',markersize=5)
+        
+    if show_headings:
+        # Sample these datasets
+        t_sample = 5
+        x = downsample(inb_travel['x'],inb_travel['Time'],t_sample)
+        y = downsample(inb_travel['y'],inb_travel['Time'],t_sample)
+        h = downsample(inb_travel['heading'],inb_travel['Time'],t_sample)
+        ax.quiver(x,y,np.sin(h),np.cos(h),width=0.002)
+
+    if radius is not None :
+        # Draw a circle in the homing plot
+        circ = patches.Circle((inb_travel['x'][0],inb_travel['y'][0]), radius=radius, color='yellow',fill=False)
+        ax.add_patch(circ)
+        
     ax.set_title(f'Closest dist: {min_dist:.1f}, search width: {search_width:.1f}')
+    ax.set_aspect('equal')
     ax.annotate('N',(0,0),fontstyle='oblique',fontsize=14)
     # Save result again
     plotter.save_plot(fig,'route_'+sim_name,plot_path)
     
     # 3. Close figures
-    plt.close('all')
+    if not interactive :
+        plt.close('all')
 
-def generate_dataset(T_outbound=1500, T_inbound=1500,N=1000,
+def get_cpu4activity(df) :
+    # Node list 
+    CPU4_names = [f'CPU4_{i}-Pout' for i in range(0,16)]
+    activity = np.zeros(len(CPU4_names))
+    for k, name in enumerate(CPU4_names) :
+        activity[k]=df[name].iloc[-1] # last instance
+        
+    return activity
+    
+def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
                      save=True, make_plots=True, plot_path=PLOT_PATH, **kwargs):
     try:
         OUT, INB = load_dataset(T_outbound, T_inbound, N,
                                            **kwargs)
     except:
 
-        # Create the correct network
-        network_args = ['Rstore','memupdate'] # add more here when needed
+        # Separate out the network arguments
+        network_args = ['Rs','memupdate','cpu_shift','weight_noise'] # add more here when needed
         network_kwargs = {k:v for k,v in kwargs.items() if k in network_args}
-        # I guess if filtered_kwargs is empty this is an empty call
-        trial_nw = setup_network(**network_kwargs)
+
         # These are the other arguments that go into the run_trial call
         trial_kwargs = {k:v for k,v in kwargs.items() if k not in network_args}
         
@@ -251,11 +359,20 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=1000,
             plot_dir = os.path.join(plot_path,dirname)
             if not os.path.isdir(plot_dir) : # check first for existance
                 os.mkdir(plot_dir)
+            if 'memupdate' in kwargs :
+                cpu4_mem_gain = kwargs['memupdate']
+            else :
+                cpu4_mem_gain = 0.001
         
         l_OUT = [] # list of DataFrames
         l_INB = [] 
+        cpu4_snapshots = np.zeros((N,stone.N_CPU4))
                           
         for i in range(N):
+            # Create network at every instance
+            # I guess if filtered_kwargs is empty this is an empty call
+            trial_nw = setup_network(**network_kwargs)
+            
             out_res, inb_res, out_travel, inb_travel = run_trial(
                     trial_nw,
                     Tout=T_outbound,
@@ -266,15 +383,20 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=1000,
             if make_plots :
                 plotname=generate_figurename(T_outbound,T_inbound,i,**kwargs)
                 one_flight_results(out_res,inb_res,out_travel,inb_travel,
-                                   plotname,plot_path=plot_dir)
+                                   plotname,plot_path=plot_dir,cpu4_mem_gain=cpu4_mem_gain)
             # Save the routes to the lists
             l_OUT.append(out_travel)
             l_INB.append(inb_travel)
+            # Separate out a cpu4 snapshot
+            cpu4_at_return = get_cpu4activity(out_res)
         
         # Combine the DataFrame to a big one
         key_sequence = np.arange(0,N)
         OUT = pd.concat(l_OUT,keys=key_sequence)
         INB = pd.concat(l_INB,keys=key_sequence)
+        
+        # Add the cpu4 activity
+        cpu4_snapshots[i] = cpu4_at_return
         
         if save:
             save_dataset(OUT, INB, T_outbound, T_inbound, N,

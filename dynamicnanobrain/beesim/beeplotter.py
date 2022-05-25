@@ -51,10 +51,48 @@ def subplot_trace(target, res, layer, attr, titles) :
     if titles :
         target.set_title(layer)
     
+def plot_motor(res, onecolumn=False,doublewidth=True) :
+    Nrows = 1 ; Ncols = 1
+    if doublewidth : 
+        nature_width = nature_double 
+    else :  
+        nature_width = nature_single
+        
+    fig, ax = plt.subplots(Nrows, Ncols, 
+                            figsize=(nature_width*Ncols, 0.5*nature_single*Nrows),
+                            sharex=True) 
+    
+
+    return fig, ax
+
+def plot_homing_dist(cpu4, summed=None) :
+    
+    mem_color_L = '#F37D4D'
+    mem_color_R = '#FABD5E'
+
+    fig, ax = plt.subplots(figsize=(nature_double,nature_single),
+                            sharex=True) 
+    
+    indices = range(1,9)
+    ax.plot(indices,cpu4[:8],color=mem_color_R)
+    ax.plot(indices,cpu4[8:],color=mem_color_L)
+    if summed is not None :
+        ax.plot(indices,summed,'k--')
+    ax.set_xticks(np.arange(1,len(indices)+1,dtype=int))
+    ax.set_xticklabels(['1/16','2/9','3/10','4/11','5/12','6/13','7/14','8/15'])
+    ax.set_xlabel('CPU4 neuron index')
+    ax.set_ylabel('Output (nA)')
+    plt.tight_layout()
+    
+    return fig, ax
+    
 
 def plot_traces(res, layers, attr, onecolumn=False, doublewidth=True,
                 time_interval=None, titles=False)    :
            
+    import warnings
+    warnings.filterwarnings('ignore',category=UserWarning) # get rid of some red text...
+    
     Nrows = len(layers)
     Ncols = 1 # Put traces with a shared x-axis
     if doublewidth : 
@@ -86,7 +124,7 @@ def plot_traces(res, layers, attr, onecolumn=False, doublewidth=True,
 def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
                           param_name,ylabel='Distance (steps)',
                           ax=None, label_font_size=11, unit_font_size=10,
-                          title=None, x_lim=10000, y_lim=300):
+                          title=None, xmin=10,xmax=10000, ymax=300):
     fig = None
     if ax is None:
         fig, ax = plt.subplots(figsize=(nature_single, nature_single))
@@ -107,8 +145,8 @@ def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
                         [m-s for m, s in zip(mu, sigma)],
                         facecolor=colors[i], alpha=0.2);
 
-    ax.set_xlim(10, x_lim)
-    ax.set_ylim(0, y_lim)
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(0, ymax)
     ax.set_title(title, fontsize=label_font_size)
     ax.tick_params(labelsize=unit_font_size)
     ax.set_xlabel('Route length (steps)', fontsize=label_font_size)
@@ -129,5 +167,59 @@ def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
     for handle in l.legendHandles:
         handle.set_visible(False)
     l.draw_frame(False)
+    plt.tight_layout()
+    return fig, ax
+
+
+def plot_angular_distance_histogram(angular_distance, ax=None, bins=36,
+                                    color='b'):
+    fig = None
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(nature_single, nature_single))
+
+    radii = np.histogram(angular_distance,
+                         np.linspace(-np.pi - np.pi / bins,
+                                     np.pi + np.pi / bins,
+                                     bins + 2,
+                                     endpoint=True))[0]
+    radii[0] += radii[-1]
+    radii = radii[:-1]
+    radii = np.roll(radii, bins//2)
+    radii = np.append(radii, radii[0])
+    # Set all values to have at least a count of 1
+    # Need this hack to get the plot fill to work reliably
+    radii[radii == 0] = 1
+    theta = np.linspace(0, 2 * np.pi, bins+1, endpoint=True)
+
+    ax.plot(theta, radii, color=color, alpha=0.5)
+    if color:
+        ax.fill_between(theta, 0, radii, alpha=0.2, color=color)
+    else:
+        ax.fill_between(theta, 0, radii, alpha=0.2)
+
+    return fig, ax
+
+def plot_angular_distances(noise_levels, angular_distances, bins=18, ax=None,
+                           label_font_size=11, log_scale=False, title=None):
+    fig = None
+    if ax is None:
+        fig, ax = plt.subplots(subplot_kw=dict(projection='polar'),
+                               figsize=(nature_single, nature_single))
+
+    colors = [cm.viridis(x) for x in np.linspace(0, 1, len(noise_levels))]
+
+    for i in reversed(range(len(noise_levels))):
+        plot_angular_distance_histogram(angular_distance=angular_distances[i],
+                                        ax=ax, bins=bins, color=colors[i])
+
+    ax.set_theta_zero_location("N")
+    ax.set_theta_direction(-1)
+    ax.set_rlabel_position(22)
+    ax.set_title(title, y=1.08, fontsize=label_font_size)
+
+    if log_scale:
+        ax.set_rscale('log')
+        ax.set_rlim(0.0, 10001)  # What determines this?
+
     plt.tight_layout()
     return fig, ax

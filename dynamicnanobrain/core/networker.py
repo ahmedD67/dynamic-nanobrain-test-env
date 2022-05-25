@@ -115,6 +115,8 @@ class HiddenLayer(Layer) :
         self.P = np.zeros(self.N)
         self.ISD = np.zeros_like(self.I)
         self.Vthres = Vthres
+        # Sequence of transistor threshold voltages, initialized to None
+        # self.Vts = np.zeros(N) 
 
         # Device object hold A, for example
         self.device=device
@@ -142,6 +144,7 @@ class HiddenLayer(Layer) :
     def update_I(self, dt) :
         """ Using a fixed dt, update the voltages."""
         # Get the source drain current from the transistor IV
+        # TODO: Send also unique Vt
         self.ISD = self.device.transistorIV(self.V[2])
         self.I += dt*self.device.gammas[-1]*(self.ISD-self.I)
         # Convert current to power through efficiency function

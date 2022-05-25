@@ -418,7 +418,7 @@ def plot_weights(weights, colormap='viridis', savefig=False) :
         
         source, target = key.split('->')
         
-        p = cax.pcolor(weight_mat, cmap=colormap, vmin=-1, vmax=1)
+        p = cax.pcolor(weight_mat, cmap=colormap,vmin=-1, vmax=1)
         p.set_edgecolor('face')
         cax.set_aspect('equal')
 
@@ -445,7 +445,7 @@ def plot_weights(weights, colormap='viridis', savefig=False) :
     #cbax = fig.add_axes([1.02, 0.05, 0.02, 0.9])
     cbax = fig.add_axes([0.85, 0.05, 0.02, 0.3])
     m = cm.ScalarMappable(cmap=colormap)
-    m.set_array(np.linspace(-1, 1, 100))
+    m.set_array(np.linspace(-1.0, 1.0, 100))
     cb = fig.colorbar(m, cbax, ticks=[-1, -0.5, 0, 0.5, 1])
     cb.set_label('Connection Strength', labelpad=10)
     cb.ax.set_yticklabels(['-1.0','-0.5','0.0','0.5','1.0'])

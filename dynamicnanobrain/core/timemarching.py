@@ -91,8 +91,7 @@ def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False)
             C *= unity_coeff
         else :
             C = layers[from_idx].C
-       
-        
+                       
         layers[to_idx].update_B(w,C)
     
     # Time step complete

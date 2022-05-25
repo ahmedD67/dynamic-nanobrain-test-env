@@ -23,7 +23,9 @@ N_TN2=2
 N_CPU1a=14
 N_CPU1b=2
 
-default_update_m = 0.25
+
+default_update_m = 0.0005
+default_cpu1_input_m = 0.5
 
 # By Tom Stone (Stone et al Curr Biology 2017)
 def gen_tb_tb_weights(weight=1.):
@@ -64,16 +66,34 @@ class TravelLog :
         
 class StoneNetwork :
     
-    def __init__(self,name='StoneNetwork', input_scaling=1.0, tb1_c=0.33, 
-                 mem_update_h=0.0025) :
+    def __init__(self,name='StoneNetwork', tb1_c=0.33, 
+                 mem_update_h=0.0025,cpu4_cpu1_m=default_cpu1_input_m,
+                 pon_cpu1_m=default_cpu1_input_m,
+                 tb1_cpu1_m=1.0, weight_noise=0.0) :
         self.name = name
-        self.input_scaling=input_scaling
         self.tb1_c=tb1_c
         self.mem_update_h = mem_update_h
+        self.cpu4_cpu1_m = cpu4_cpu1_m
+        self.pon_cpu1_m = pon_cpu1_m
+        self.tb1_cpu1_m = tb1_cpu1_m
+        # Specify noise in weights before setting weights
+        self.weight_noise = weight_noise
+        if self.weight_noise > 0.0 :
+            self.noisy_weights=True
+        else :
+            self.noisy_weights=False
+        # Set connections and weights
         self.layers, self.weights = self.initialize_nw()
         # Initialize a dictionary for the devices
         self.devices = {}
 
+
+    def noisify_weights(self, W, noise=0.01):
+        """Takes a weight matrix and adds some noise on to non-zero values."""
+        N = np.random.normal(scale=noise, size=W.shape)
+        # Only noisify the connections (positive values in W). Not the zeros.
+        N_nonzero = N * W
+        return W + N_nonzero
         
     def initialize_nw(self) :
         # Defining layers with custom labels        
@@ -93,30 +113,36 @@ class StoneNetwork :
         weights['CL1->TB1']=nw.connect_layers('CL1', 'TB1', layers, channel='blue')
         W = np.tile(np.diag([1.0]*N_TB1),2)
         W *= (1.-self.tb1_c) # scaling factor to weigh TB1 and CL1 input to TB1
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
         weights['CL1->TB1'].set_W(W)
         
         weights['TB1->TB1']=nw.connect_layers('TB1','TB1',layers,channel='green')
         W = gen_tb_tb_weights(weight=self.tb1_c)
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
         weights['TB1->TB1'].set_W(W)
         
         weights['TB1->CPU4']=nw.connect_layers('TB1', 'CPU4', layers, channel='green')
         W = np.tile(np.diag([1.0]*N_TB1),(2,1)) 
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
         weights['TB1->CPU4'].set_W(W)
         # The memory is updated with a lower weight
         weights['TB1->CPU4'].scale_W(self.mem_update_h)
         
         weights['TB1->CPU1a']=nw.connect_layers('TB1', 'CPU1a', layers, channel='green')
         W = np.tile(np.diag([1.0]*N_TB1),(2,1))
-        weights['TB1->CPU1a'].set_W(W[1:-1])
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
+        weights['TB1->CPU1a'].set_W(W[1:-1]*self.tb1_cpu1_m)
         
         weights['TB1->CPU1b']=nw.connect_layers('TB1', 'CPU1b', layers, channel='green')
         W = np.zeros((2,N_TB1))
         W[0,-1] = 1.0
         W[1,0]  = 1.0
-        weights['TB1->CPU1b'].set_W(W)
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
+        weights['TB1->CPU1b'].set_W(W*self.tb1_cpu1_m)
         
         weights['TN2->CPU4']=nw.connect_layers('TN2', 'CPU4', layers, channel='brown')
         W = np.concatenate((np.tile(np.array([1,0]),(N_CPU4//2,1)),np.tile(np.array([0,1]),(N_CPU4//2,1)))) 
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
         weights['TN2->CPU4'].set_W(W)
         # The memory is updated with a lower weight
         weights['TN2->CPU4'].scale_W(self.mem_update_h)
@@ -137,16 +163,19 @@ class StoneNetwork :
                         [0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
                         [0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0.], #15
                         ])
-        weights['CPU4->CPU1a'].set_W(W)
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
+        weights['CPU4->CPU1a'].set_W(W*self.cpu4_cpu1_m) # scale with 0.5
         
         weights['CPU4->CPU1b']=nw.connect_layers('CPU4', 'CPU1b', layers, channel='orange')
         W = np.zeros((2,N_CPU4))
         W[0,0]=1.0
         W[-1,-1]=1.0
-        weights['CPU4->CPU1b'].set_W(W)
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
+        weights['CPU4->CPU1b'].set_W(W*self.cpu4_cpu1_m)
         
         weights['CPU4->Pontine']=nw.connect_layers('CPU4', 'Pontine', layers, channel='orange')
         W = np.diag([1.0]*N_CPU4)
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
         weights['CPU4->Pontine'].set_W(W)
         
         weights['Pontine->CPU1a']=nw.connect_layers('Pontine', 'CPU1a', layers, channel='green')
@@ -165,13 +194,15 @@ class StoneNetwork :
                         [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                         [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], #15])
                         ],dtype=float)
-        weights['Pontine->CPU1a'].set_W(W)
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
+        weights['Pontine->CPU1a'].set_W(W*self.pon_cpu1_m)
         
         weights['Pontine->CPU1b']=nw.connect_layers('Pontine', 'CPU1b', layers, channel='green')
         W = np.zeros((2,N_Pontine))
         W[0,4] = 1.0
         W[1,11]= 1.0
-        weights['Pontine->CPU1b'].set_W(W)
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
+        weights['Pontine->CPU1b'].set_W(W*self.pon_cpu1_m)
         
         return layers, weights
         
@@ -206,8 +237,8 @@ class StoneNetwork :
         self.mem_coeff, self.mem_Imax = device.inverse_gain_coefficient(device.eta_ABC, self.layers[key].Vthres)
         return self.mem_coeff, self.mem_Imax
     
-    def specify_inputs(self,key,input_handle) :
-        self.layers[key].set_input_vector_func(func_handle=input_handle(self.Imax*self.input_scaling))
+    def specify_inputs(self,key,input_handle,scaling=1.0) :
+        self.layers[key].set_input_vector_func(func_handle=input_handle(scaling*self.Imax))
         
     def updateheading(self,heading,layers,update_m=default_update_m) :
         # sum left and right hand turning neurons
@@ -217,8 +248,10 @@ class StoneNetwork :
         
     def evolve(self,T,reset=True,t0=0.,inbound=False,savestep=1.0,
                initial_pos=(0,0),initial_vel=(0,0),initial_heading=0,
-               a=0.1, drag=0.15, updateheading_m=default_update_m,
-               printdiag=False) : 
+               a=0.1, drag=0.15, hupdate=default_update_m,
+               inputscaling=0.9,noise=0.1,
+               mem_init_c=0.25,
+               printtime=False) : 
                
         # Start time is t
         t=t0
@@ -234,7 +267,7 @@ class StoneNetwork :
             
         if not inbound :
             # Initialize activity in the memory cells
-            self.layers['CPU4'].V[:,:]=self.layers['CPU4'].Vthres/2
+            self.layers['CPU4'].V[:,:]=self.layers['CPU4'].Vthres*mem_init_c
             
         # Create a log over the dynamic data
         time_log = logger.Logger(self.layers,feedback=True) # might need some flags
@@ -259,8 +292,10 @@ class StoneNetwork :
 
             def tn2_activity(t) :
                 tn2 = get_flow(heading, v)
+                # Add noise
+                tn2 += np.random.normal(scale=noise, size=len(tn2))
                 # scale by the standard current factor
-                return np.clip(tn2,0,1)*self.Imax*self.input_scaling
+                return np.clip(tn2,0,1)*self.Imax*inputscaling
             
             # Specify the output function
             self.layers['TN2'].set_input_vector_func(tn2_activity)
@@ -290,13 +325,13 @@ class StoneNetwork :
             
             def tl2_activity(heading):
                 output = np.cos(heading - TL_angles)
-                return noisy_sigmoid(output, tl2_slope_tuned, tl2_bias_tuned, noise=0.0)
+                return noisy_sigmoid(output, tl2_slope_tuned, tl2_bias_tuned, noise=noise)
             
             def cl1_activity(t):
                 output = tl2_activity(heading)
-                sig = noisy_sigmoid(-output, cl1_slope_tuned, cl1_bias_tuned, noise=0.0)
+                sig = noisy_sigmoid(-output, cl1_slope_tuned, cl1_bias_tuned, noise=noise)
                 # scale by the standard current factor
-                return sig*self.Imax*self.input_scaling
+                return sig*self.Imax*inputscaling
             
             def rotate(theta, r):
                 """Return new heading after a rotation around Z axis."""
@@ -313,28 +348,27 @@ class StoneNetwork :
         
             # update with explicit Euler using dt
             # supplying the unity_coeff here to scale the weights
+            # TODO: Add noise if needed
             tm.update(dt, t, self.layers, self.weights, self.unity_coeff, t0)
             
             if inbound :
                 # update agent heading
-                motor = self.updateheading(heading,self.layers,updateheading_m)
+                motor = self.updateheading(heading,self.layers,hupdate)
                 # use a dt here since we do many turns per time unit
                 heading = rotate(heading,motor*dt)
                 # velocity using drag force and acceleration
+                v -= v*drag*dt
                 v[0] += np.sin(heading)*a*dt
                 v[1] += np.cos(heading)*a*dt
-                v -= v*drag*dt
                 x += v*dt
-                if printdiag :
-                    print(f'Heading is: {heading}, velocity is {v}')
-                            
             
             t += dt
             # Log the progress
             if t > savetime :
                 # Put log update here to have (more or less) fixed sample rate
                 # Now this is only to check progress
-                print(f'Time at t={t} ns') 
+                if printtime :
+                    print(f'Time at t={t} ns') 
                 savetime += savestep         
                 time_log.add_tstep(t, self.layers, self.unity_coeff)
                 
@@ -342,7 +376,7 @@ class StoneNetwork :
                     travel_log.add_tstep(t,x,v,heading,motor)
         
         end = time.time()
-        print('Time used:',end-start)
+        print(f'Travel steps: T={T}, time used:{end-start}')
         
         # This is a large pandas data frame of all system variables
         result = time_log.get_timelog()

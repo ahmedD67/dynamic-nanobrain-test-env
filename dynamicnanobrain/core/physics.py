@@ -58,9 +58,12 @@ class Device:
     def Id_sat(self,Vg) :
         return self.p_dict['I_Vt'] + self.linslope*(Vg-self.p_dict['Vt'])
 
+    # TODO: Read vector of Vt as well as Vg
     def transistorIV(self,Vg) :
         # Returns current in nA
+        # TODO: Check for None here
         Vt = self.p_dict['Vt']
+        # This should work even when Vt is an array
         return np.piecewise(Vg, [Vg<Vt, Vg>=Vt], [self.Id_sub, self.Id_sat])   
     
     def transistorIV_example (self, Vstart=-0.5, Vend=1.0) :
