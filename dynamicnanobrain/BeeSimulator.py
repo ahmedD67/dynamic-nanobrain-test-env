@@ -177,7 +177,8 @@ min_dist, min_dist_std, search_dist, search_dist_std = trials.analyze_inbound(IN
 
 #%% Specific results can be obtained by
 
-my_nw = trials.setup_network(memupdate=0.001)
+my_nw = trials.setup_network(memupdate=0.001, weight_noise=0.1) # WARNING NOT RELATIVE NOISE, IN V
+#my_nw.show_weights()
 
 out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,1500,1500,a=0.07,hupdate=0.001)                                                         
 

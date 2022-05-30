@@ -116,7 +116,7 @@ class HiddenLayer(Layer) :
         self.ISD = np.zeros_like(self.I)
         self.Vthres = Vthres
         # Sequence of transistor threshold voltages, initialized to None
-        # self.Vts = np.zeros(N) 
+        self.Vt_vec = None 
 
         # Device object hold A, for example
         self.device=device
@@ -128,6 +128,8 @@ class HiddenLayer(Layer) :
         self.Bscale=np.diag([1e-18/self.device.p_dict['Cinh'],
                              1e-18/self.device.p_dict['Cexc'],
                              0.])
+    def specify_Vt(self,Vts) :
+        self.Vt_vec = Vts
         
     def get_dV(self, t) :     
         """ Calculate the time derivative."""
@@ -144,8 +146,7 @@ class HiddenLayer(Layer) :
     def update_I(self, dt) :
         """ Using a fixed dt, update the voltages."""
         # Get the source drain current from the transistor IV
-        # TODO: Send also unique Vt
-        self.ISD = self.device.transistorIV(self.V[2])
+        self.ISD = self.device.transistorIV(self.V[2],self.Vt_vec)
         self.I += dt*self.device.gammas[-1]*(self.ISD-self.I)
         # Convert current to power through efficiency function
         self.P = self.I*self.device.eta_ABC(self.I)

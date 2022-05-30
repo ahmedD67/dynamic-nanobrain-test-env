@@ -69,7 +69,7 @@ class StoneNetwork :
     def __init__(self,name='StoneNetwork', tb1_c=0.33, 
                  mem_update_h=0.0025,cpu4_cpu1_m=default_cpu1_input_m,
                  pon_cpu1_m=default_cpu1_input_m,
-                 tb1_cpu1_m=1.0, weight_noise=0.0) :
+                 tb1_cpu1_m=1.0, weight_noise=0.0, Vt_noise=0.0) :
         self.name = name
         self.tb1_c=tb1_c
         self.mem_update_h = mem_update_h
@@ -84,9 +84,17 @@ class StoneNetwork :
             self.noisy_weights=False
         # Set connections and weights
         self.layers, self.weights = self.initialize_nw()
+            
         # Initialize a dictionary for the devices
         self.devices = {}
-
+        
+    def noisify_Vt(self, noise) :
+        # Loop through layers
+        for key in self.layers :
+            # Original Vt
+            if self.layers[key].layer_type == 'hidden' :
+                Vt0 = self.layers[key].device.p_dict['Vt']
+                self.layers[key].Vt_vec = Vt0 + np.random.normal(scale=noise,size=self.layers[key].N)
 
     def noisify_weights(self, W, noise=0.01):
         """Takes a weight matrix and adds some noise on to non-zero values."""

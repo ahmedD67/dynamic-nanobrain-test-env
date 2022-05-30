@@ -52,19 +52,31 @@ class Device:
         print(f'The parameter {key}={self.p_dict[key]} {self.p_units[key]}')
               
     # Supply transistor functionality, the method transistorIV can be ported 
-    def Id_sub(self,Vg) :
-        return self.p_dict['I_Vt']*np.exp((Vg-self.p_dict['Vt'])/self.p_dict['m']/self.kT)
+    def Id_sub(self,Vg,Vt,mask) :
+        return self.p_dict['I_Vt']*np.exp((Vg-Vt[mask])/self.p_dict['m']/self.kT)
 
-    def Id_sat(self,Vg) :
-        return self.p_dict['I_Vt'] + self.linslope*(Vg-self.p_dict['Vt'])
+    def Id_sat(self,Vg,Vt,mask) :
+        # Invert the mask for this one
+        return self.p_dict['I_Vt'] + self.linslope*(Vg-Vt[mask==False])
+    
+    def Id_sub_0(self,Vg,Vt) :
+        return self.p_dict['I_Vt']*np.exp((Vg-Vt)/self.p_dict['m']/self.kT)
 
-    # TODO: Read vector of Vt as well as Vg
-    def transistorIV(self,Vg) :
-        # Returns current in nA
-        # TODO: Check for None here
-        Vt = self.p_dict['Vt']
-        # This should work even when Vt is an array
-        return np.piecewise(Vg, [Vg<Vt, Vg>=Vt], [self.Id_sub, self.Id_sat])   
+    def Id_sat_0(self,Vg,Vt) :
+        return self.p_dict['I_Vt'] + self.linslope*(Vg-Vt)
+
+    def transistorIV(self,Vg,Vt_vec=None) :
+        """Reads gate voltage and calculated transistor current based on 
+        parameters in p_dict. Can take a vector of individual threshold currents 
+        to introduce fluctuations in the system. Returns current in nA."""
+
+        if Vt_vec is None :
+            Vt = self.p_dict['Vt'] 
+            return np.piecewise(Vg, [Vg<Vt, Vg>=Vt], [self.Id_sub_0, self.Id_sat_0],Vt) 
+        else :
+            Vt = Vt_vec
+            # This should work even when Vt is an array
+            return np.piecewise(Vg, [Vg<Vt, Vg>=Vt], [self.Id_sub, self.Id_sat],Vt,Vg<Vt)   
     
     def transistorIV_example (self, Vstart=-0.5, Vend=1.0) :
         # Generate a sample transistor IV, generates data in uA

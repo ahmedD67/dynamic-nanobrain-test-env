@@ -173,7 +173,7 @@ def run_trial(trial_nw,Tout=1000,Tinb=1500,
     return out_res, inb_res, out_travel, inb_travel
 
 def setup_network(Rs=2e11, memupdate=0.004, manipulate_shift=True, onset_shift=0.0,
-                  cpu_shift=-0.2,**kwargs) :
+                  cpu_shift=-0.2,Vt_noise=0.0,**kwargs) :
     
     setup_nw = stone.StoneNetwork(mem_update_h=memupdate,**kwargs) 
     # Setup the internal devices
@@ -189,7 +189,7 @@ def setup_network(Rs=2e11, memupdate=0.004, manipulate_shift=True, onset_shift=0
     devices['CPU1a']=physics.Device('../parameters/device_parameters.txt')
     devices['CPU1b']=physics.Device('../parameters/device_parameters.txt')
     devices['Pontine']=physics.Device('../parameters/device_parameters.txt')
-
+    
     if manipulate_shift :
         # Get the original Vt
         Vt0 = devices['TB1'].p_dict['Vt']
@@ -201,6 +201,10 @@ def setup_network(Rs=2e11, memupdate=0.004, manipulate_shift=True, onset_shift=0
 
     # Feed the devices into the network
     setup_nw.assign_device(devices, unity_key='TB1')
+    
+    # As a final step, noisify the threshold voltages
+    if Vt_noise > 0.0 :
+        setup_nw.noisify_Vt(Vt_noise) 
     
     return setup_nw
 
