@@ -55,10 +55,6 @@ def analyse(N, param_dict, radius=20):
 
 #%%
 
-cpu4_mem_gain=0.4
-cpu4_mem_gain=0.5
-
-
 def decode_position(cpu4_reshaped, cpu4_mem_gain):
     """Decode position from sinusoid in to polar coordinates.
     Amplitude is distance, Angle is angle from nest outwards.
@@ -74,7 +70,7 @@ def decode_position(cpu4_reshaped, cpu4_mem_gain):
     distance = np.absolute(fund_freq) / cpu4_mem_gain
     return angle, distance
 
-def decode_cpu4(cpu4):
+def decode_cpu4(cpu4, cpu4_mem_gain):
     """Shifts both CPU4 by +1 and -1 column to cancel 45 degree flow
     preference. When summed single sinusoid should point home."""
     cpu4_reshaped = cpu4.reshape(2, -1)
@@ -102,13 +98,10 @@ N = 50 # number of trials for each parameter to test
 N_dists = 9 # number of logarithmic distance steps
 
 distances = np.round(10 ** np.linspace(2, 4, N_dists)).astype('int')
-out_distances = np.round(10 ** np.linspace(2, 4, N_dists)).astype('int')
-in_distances = np.round(0.5*(10 ** np.linspace(2, 4, N_dists))).astype('int')
-#distances = [100, 200, 500, 1500, 2000, 4000, 8000]
 #distances = [1500]
-N_dists= len(out_distances)
+N_dists= len(distances)
 
-# List the parameter values of interest
+# List of parameters that have been studied (keeping for reference)
 memupdate_vals = [0.0005,0.001,0.002,0.004]#, 0.005, 0.0025, 0.0050, 0.01]
 inputscale_vals = [0.7, 0.8, 0.9, 1.0]
 meminitc_vals = [0.0,0.25,0.5]
@@ -118,18 +111,10 @@ Vt_noise_vals = [0.01, 0.02, 0.05]
 reduced_a = 0.07
 
 # Specify the dict of parameters
+param_dicts = [{'n':N_dists, 'a':[reduced_a]*N_dists, 'Vt_noise': [noise]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for noise in Vt_noise_vals]
+#
+# This dictionary specifies an earlier run that I kept the data from
 param_dict_ref = {'n':N_dists, 'a':[reduced_a]*N_dists, 'noise':[0.1]*N_dists, 'T_outbound': distances, 'T_inbound': distances}
-#param_dicts = [{'n':N_dists, 'T_outbound': distances, 'T_inbound': distances,'straight_route':[True]*N_dists, 'fix_heading':[np.pi/4]*N_dists}]
-#param_dicts = [{'n':N_dists, 'memupdate': [mem]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for mem in memupdate_vals]
-param_dicts = [{'n':N_dists, 'a':[reduced_a]*N_dists, 'Vt_noise': [noise]*N_dists, 'T_outbound': out_distances, 'T_inbound': in_distances} for noise in Vt_noise_vals]
-#param_dicts = [{'n':N_dists, 'memupdate': [0.004]*N_dists, 'mem_init_c':[initc]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for initc in meminitc_vals]
-#param_dicts = [{'n':N_dists, 'memupdate': [0.004]*N_dists, 'mem_init_c':[0.25]*N_dists,'inputscaling':[scale]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for scale in inputscale_vals]
-#param_dicts = [{'n':N_dists, 'memupdate': [0.004]*N_dists, 'mem_init_c':[0.25]*N_dists,'inputscaling':[0.9]*N_dists, 'cpu_shift': [shift]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for shift in cpushift_vals]
-
-#param_dicts = [{'n':N_dists,'inputscaling': [scale]*N_dists,'Rs': [Rstore]*N_dists, 
-#                'T_outbound': distances,'T_inbound': distances} for scale in inputscale_vals]
-
-#param_dicts.append({'n':N_dists, 'T_outbound': distances, 'T_inbound': distances, 'random_homing':[True]*N_dists})
 
 min_dists_l = []
 min_dist_stds_l = []
@@ -189,13 +174,16 @@ OUT, INB = trials.generate_dataset(T,T,1)
 # Output is after statistical analysis (mean and std)
 min_dist, min_dist_std, search_dist, search_dist_std = trials.analyze_inbound(INB,T,T)
 
-#%% Specific results can be obtained by
-
-my_nw = trials.setup_network(memupdate=0.001, onset_shift=-0.2) # WARNING NOT RELATIVE NOISE, REAL STD VALUE IN IN V
-#my_nw.show_weights()
-#my_nw.show_devices(Vleak_dict={})
-
+#%% Or single flight can be generated like this to get the network instance
+my_nw = trials.setup_network(memupdate=0.001) 
 out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,1500,1500,a=0.07)                                                         
+
+#%% Visualize devices and weights
+my_nw.show_weights()
+my_nw.show_devices(Vleak_dict={})
+
+#%% Plot route and time traces
+trials.one_flight_results(out_res, inb_res, out_travel, inb_travel, 'test',interactive=True, cpu4_mem_gain=0.001,radius=20)
 
 #%% Plot speed signals
 
@@ -215,21 +203,13 @@ ax.plot(inb_travel['Time'],v_in)
 print('Average velocity (outbound):',v_out.mean())
 
 
-#%%
 
-trials.one_flight_results(out_res, inb_res, out_travel, inb_travel, 'test',interactive=True, cpu4_mem_gain=0.001,radius=20)
-
-#%%
-
-my_nw.show_devices(Vleak_dict={})
-my_nw.show_weights()
-
-#%%
+#%% Plot CPU4 memory bump
 cpu4 = trials.get_cpu4activity(out_res)
 
 beeplotter.plot_homing_dist(cpu4, shift_cpu4(cpu4))
 
-angle, distance = decode_cpu4(cpu4)
+angle, distance = decode_cpu4(cpu4, my_nw.mem_update_h)
 
 #%% Extra diagnostics to check out the CPU1 neurons
 # When plotting in a notebook, use the onecolumn flag as below.

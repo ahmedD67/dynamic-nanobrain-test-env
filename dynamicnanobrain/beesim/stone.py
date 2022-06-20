@@ -179,7 +179,7 @@ class StoneNetwork :
         W[0,0]=1.0
         W[-1,-1]=1.0
         if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
-        weights['CPU4->CPU1b'].set_W(W*self.cpu4_cpu1_m)
+        weights['CPU4->CPU1b'].set_W(W*self.cpu4_cpu1_m) # scale with 0.5
         
         weights['CPU4->Pontine']=nw.connect_layers('CPU4', 'Pontine', layers, channel='orange')
         W = np.diag([1.0]*N_CPU4)
