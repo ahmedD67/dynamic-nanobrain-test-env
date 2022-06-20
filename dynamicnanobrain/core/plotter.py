@@ -136,7 +136,7 @@ def visualize_network(layers, weights, exclude_nodes={},
     elif layout=='spiral' :
         pos=nx.spiral_layout(G)
     elif layout=='kamada_kawai' :
-        pos=nx.kamada_kawai_layout(G)
+        pos=nx.kamada_kawai_layout(G, **kwargs)
     elif layout=='shell' :
         nlist = []
         # Combine the output and input layer on the same circle
@@ -190,6 +190,7 @@ def visualize_network(layers, weights, exclude_nodes={},
     if savefig :
         #nx.drawing.nx_pydot.write_dot(G, 'network_layout.dot')
         plt.savefig('network_layout.png',dpi=300)
+        plt.savefig('network_layout.svg')
     
     plt.show()
     
@@ -384,6 +385,118 @@ def movie_maker(movie_series, layers, weights, exclude_nodes={}, node_size=600, 
     
     # Show animation in the end    
     plt.show()
+
+def bode_plot(device,plot_f_min=1e-3,plot_f_max=10,indicate_freq=None) :
+    import numpy as np
+    # Units are already in GHz so this creates a space from 1 MHz to 10 GHz
+    Ns=100
+    s_exp = np.linspace(-4,1,Ns)
+    s = 1j*10**s_exp
+
+    # Sample the gain function
+    eigvals = device.setup_gain(device.gammas)
+    G11, _ = device.gain(s,eigvals,device.gammas)
+
+    # Amplitude (normalized) and phase data
+    mag_G11 = np.absolute(G11) / np.absolute(G11[0])
+    arg_G11 = np.angle(G11)
+
+    # Use decibel units
+    mag_G11_dB = 20*np.log10(mag_G11)
+
+    # Produce Bode plots of the results
+    fig, (ax1, ax2) = plt.subplots(2,1,figsize=(nature_double,nature_single),sharex=True)
+
+    f_min = abs(s[0])
+
+    ax1.plot(abs(s),mag_G11_dB)
+    ax1.plot([f_min,plot_f_max],[-3,-3],'k--')
+    ax1.grid('True')
+    ax1.set_xscale('log')
+    ax1.set_title('Bode plots for dynamic node')
+    #ax1.set_xlabel('Frequency (GHz)')
+    ax1.set_ylabel('|G11|/|G11[0]| (dB)')
+    ax1.set_ylabel('|H| (dB)')
+    ax1.set_xlim(plot_f_min,plot_f_max)
+    ax1.set_ylim(-20,2)
+
+    ax2.plot(abs(s),arg_G11*180/np.pi)
+    ax2.grid('True')
+    #ax2.set_xscale('log')
+    ax2.set_xlabel('Frequency (GHz)')
+    ax2.set_ylabel('Phase (radians)')
+    ax2.set_ylim(-180,10)
+    
+    if indicate_freq is not None :
+        ax1.plot([indicate_freq,indicate_freq],ax1.get_ylim(),'r--',lw=2)
+        ax2.plot([indicate_freq,indicate_freq],ax2.get_ylim(),'r--',lw=2)
+        
+    plt.tight_layout()
+
+    return fig, ax1, ax2
+
+def bode_multi_plot(devices,plot_f_min=1e-3,plot_f_max=10,indicate_freq=None) :
+    import numpy as np
+    # MAKE SURE DEVICES IS A DICTIONARY indexed [-k, ..., -1, 0, 1... k]
+    # Units are already in GHz so this creates a space from 1 MHz to 10 GHz
+    Ns=100
+    s_exp = np.linspace(-3,1,Ns)
+    s = 1j*10**s_exp
+    
+    # Sample the gain function for all devices
+    G11 = {}
+    for k, device in devices.items() :
+        eigvals = device.setup_gain(device.gammas)
+        G11[k], _ = device.gain(s,eigvals,device.gammas)
+
+    
+
+    # Produce Bode plots of the results
+    fig, (ax1, ax2) = plt.subplots(2,1,figsize=(nature_double,nature_single),sharex=True)
+
+    f_min = abs(s[0])
+
+    for k in devices :
+        # Amplitude (normalized) and phase data
+        mag_G11 = np.absolute(G11[k]) / np.absolute(G11[k][0])
+        arg_G11 = np.angle(G11[k])
+
+        # Use decibel units
+        mag_G11_dB = 20*np.log10(mag_G11)
+        if k == 0 :
+            style = '-'
+            my_lw=2
+        else :
+            style = '--'
+            my_lw=1
+            
+        ax1.plot(abs(s),mag_G11_dB,style,color=colors[0],lw=my_lw)
+        ax2.plot(abs(s),arg_G11*180/np.pi,style,color=colors[0],lw=my_lw)
+        
+    ax1.plot([f_min,plot_f_max],[-3,-3],'k--')
+    ax1.grid('True')
+    ax1.set_xscale('log')
+    ax1.set_title('Bode plots for dynamic node')
+    #ax1.set_xlabel('Frequency (GHz)')
+    ax1.set_ylabel('|G11|/|G11[0]| (dB)')
+    ax1.set_ylabel('|H| (dB)')
+    ax1.set_xlim(plot_f_min,plot_f_max)
+    ax1.set_ylim(-20,2)
+
+    
+    ax2.grid('True')
+    #ax2.set_xscale('log')
+    ax2.set_xlabel('Frequency (GHz)')
+    ax2.set_ylabel('Phase (radians)')
+    ax2.set_ylim(-180,10)
+    
+    if indicate_freq is not None :
+        ax1.plot([indicate_freq,indicate_freq],ax1.get_ylim(),'r--',lw=2)
+        ax2.plot([indicate_freq,indicate_freq],ax2.get_ylim(),'r--',lw=2)
+        
+    plt.tight_layout()
+
+    return fig, ax1, ax2
 
 def plot_weights(weights, colormap='viridis', savefig=False) :
     

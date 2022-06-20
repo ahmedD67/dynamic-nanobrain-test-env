@@ -91,27 +91,37 @@ class Device:
         
         return df
 
-    # Supply the gammas needed for time stepping
-    def calc_gammas(self) :
+    def calc_Cmem(self,Cstore=None) :
         # Sum the memory and gate capacitance, convert Lg in um to cm
-        Cmem = self.p_dict['Cstore'] + self.p_dict['Cgate']*self.p_dict['Lg']*1e-4 
+        if Cstore is None :
+            Cmem = self.p_dict['Cstore'] + self.p_dict['Cgate']*self.p_dict['Lg']*1e-4 
+        else :
+            Cmem = Cstore + self.p_dict['Cgate']*self.p_dict['Lg']*1e-4  
+        return Cmem
+
+    # Supply the gammas needed for time stepping
+    def calc_gammas(self,Rstore=None,Cstore=None) :
+        # Sum the memory and gate capacitance, convert Lg in um to cm
+        if Cstore is not None:
+            Cmem = self.calc_Cmem(Cstore)
+        else :
+            Cmem = self.calc_Cmem()
         # System frequencies
         g11 = 1e-9/self.p_dict['Cinh']/self.p_dict['Rinh'] # ns^-1 # GHz
         g22 = 1e-9/self.p_dict['Cexc']/self.p_dict['Rexc'] # ns^-1 # GHz
         g13 = 1e-9/Cmem/self.p_dict['Rinh'] # ns^-1 # GHz
         g23 = 1e-9/Cmem/self.p_dict['Rexc'] # ns^-1 # GHz
-        g33 = 1e-9/Cmem/self.p_dict['Rstore'] # ns^-1 # GHz
+        if Rstore is not None :
+            g33 = 1e-9/Cmem/Rstore
+        else :
+            g33 = 1e-9/Cmem/self.p_dict['Rstore'] # ns^-1 # GHz
         gled = 1e-9/self.p_dict['CLED']/self.p_dict['RLED'] # ns^-1 # GHz
 
         return np.array([g11,g22,g13,g23,g33,gled])
 
     def calc_tau_gate(self) :
-        # Sum the memory and gate capacitance, convert Lg in um to cm
-        Cmem = self.p_dict['Cstore'] + self.p_dict['Cgate']*self.p_dict['Lg']*1e-4 
         # System frequencies
-        g13 = 1e-9/Cmem/self.p_dict['Rinh'] # ns^-1 # GHz
-        g23 = 1e-9/Cmem/self.p_dict['Rexc'] # ns^-1 # GHz
-        g33 = 1e-9/Cmem/self.p_dict['Rstore'] # ns^-1 # GHz
+        g33 = 1e-9/self.calc_Cmem()/self.p_dict['Rstore'] # ns^-1 # GHz
         # Modifying this as it is g33 that matter for a system in equilibrium
         return g33**-1
 
@@ -124,9 +134,17 @@ class Device:
     
         return A
     
-    def calc_A(self) :
-        # Calcualte A
-        return self.A_mat(*self.gammas[:-1])    
+    def calc_A(self,Rstore=None,Cstore=None) :
+        # Calcualte A for the special case of a distribution of Rstore and Cstore, 
+        # or for the object self.gammas
+        if (Rstore is not None) and (Cstore is not None) :
+            new_gammas = self.calc_gammas(Rstore,Cstore)
+            return self.A_mat(*new_gammas[:-1])
+        elif Rstore is not None :
+            new_gammas = self.calc_gammas(Rstore)
+            return self.A_mat(*new_gammas[:-1])
+        else :
+            return self.A_mat(*self.gammas[:-1])    
 
     # Transfer function calculations
     def setup_gain (self,gammas) :

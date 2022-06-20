@@ -170,8 +170,7 @@ def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
     plt.tight_layout()
     return fig, ax
 
-
-def plot_angular_distance_histogram(angular_distance, ax=None, bins=36,
+def plot_angular_distance_histogram(angular_distance, scale=1.0, ax=None, bins=36,
                                     color='b'):
     fig = None
     if ax is None:
@@ -191,16 +190,16 @@ def plot_angular_distance_histogram(angular_distance, ax=None, bins=36,
     radii[radii == 0] = 1
     theta = np.linspace(0, 2 * np.pi, bins+1, endpoint=True)
 
-    ax.plot(theta, radii, color=color, alpha=0.5)
+    ax.plot(theta, scale*radii, color=color, alpha=0.5)
     if color:
-        ax.fill_between(theta, 0, radii, alpha=0.2, color=color)
+        ax.fill_between(theta, 0, radii*scale, alpha=0.2, color=color)
     else:
-        ax.fill_between(theta, 0, radii, alpha=0.2)
+        ax.fill_between(theta, 0, radii*scale, alpha=0.2)
 
     return fig, ax
 
 def plot_angular_distances(noise_levels, angular_distances, bins=18, ax=None,
-                           label_font_size=11, log_scale=False, title=None):
+                           label_font_size=11, log_scale=False, title=None, scale=None):
     fig = None
     if ax is None:
         fig, ax = plt.subplots(subplot_kw=dict(projection='polar'),
@@ -208,8 +207,10 @@ def plot_angular_distances(noise_levels, angular_distances, bins=18, ax=None,
 
     colors = [cm.viridis(x) for x in np.linspace(0, 1, len(noise_levels))]
 
+    if scale is None :
+        scale = [1.0]*len(noise_levels)
     for i in reversed(range(len(noise_levels))):
-        plot_angular_distance_histogram(angular_distance=angular_distances[i],
+        plot_angular_distance_histogram(angular_distance=angular_distances[i],scale=scale[i],
                                         ax=ax, bins=bins, color=colors[i])
 
     ax.set_theta_zero_location("N")

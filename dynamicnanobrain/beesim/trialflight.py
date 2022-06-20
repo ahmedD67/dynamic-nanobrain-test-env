@@ -172,7 +172,7 @@ def run_trial(trial_nw,Tout=1000,Tinb=1500,
 
     return out_res, inb_res, out_travel, inb_travel
 
-def setup_network(Rs=2e11, memupdate=0.004, manipulate_shift=True, onset_shift=0.0,
+def setup_network(Rs=2e11, memupdate=0.001, manipulate_shift=True, onset_shift=0.0,
                   cpu_shift=-0.2,Vt_noise=0.0,**kwargs) :
     
     setup_nw = stone.StoneNetwork(mem_update_h=memupdate,**kwargs) 
@@ -349,7 +349,7 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
     except:
 
         # Separate out the network arguments
-        network_args = ['Rs','memupdate','cpu_shift','weight_noise'] # add more here when needed
+        network_args = ['Rs','memupdate','cpu_shift','weight_noise','Vt_noise'] # add more here when needed
         network_kwargs = {k:v for k,v in kwargs.items() if k in network_args}
 
         # These are the other arguments that go into the run_trial call

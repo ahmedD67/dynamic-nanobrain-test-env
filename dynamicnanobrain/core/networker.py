@@ -72,7 +72,7 @@ class Layer :
 class HiddenLayer(Layer) :
     
     def __init__(self, N, output_channel, inhibition_channel, excitation_channel, 
-                 device=None, Vthres=1.2) :
+                 device=None, Vthres=1.2, multiA=False) :
         """
         Constructor for hidden layers.
     
@@ -117,9 +117,9 @@ class HiddenLayer(Layer) :
         self.Vthres = Vthres
         # Sequence of transistor threshold voltages, initialized to None
         self.Vt_vec = None 
-
         # Device object hold A, for example
         self.device=device
+        self.multiA=multiA
 
     def assign_device(self, device) :
         """ Assing a Device object to all the hidden layer nodes."""
@@ -128,12 +128,61 @@ class HiddenLayer(Layer) :
         self.Bscale=np.diag([1e-18/self.device.p_dict['Cinh'],
                              1e-18/self.device.p_dict['Cexc'],
                              0.])
+        
+    def generate_uniform_Adist(self, scale) :
+        """Here we do another variation of the memory constants"""
+        if self.device is None :
+            print("Please first assign a device before generating Adist")
+        else :
+            A = np.zeros((self.N,3,3))
+            R_ref = self.device.p_dict['Rstore']
+            C_ref = self.device.p_dict['Cstore']
+            rng = np.random.RandomState()
+            scale_RC_dist = np.sqrt(rng.uniform(1.0,scale**2,size=self.N))
+            for k in range(0,self.N) :
+                A[k] = self.device.calc_A(R_ref*scale_RC_dist[k],C_ref*scale_RC_dist[k])
+            self.Adist = A
+    
+    def generate_exp_Adist(self, mean) :
+        if self.device is None :
+            print("Please first assign a device before generating Adist")
+        else :
+            A = np.zeros((self.N,3,3))
+            R_ref = self.device.p_dict['Rstore']
+            C_ref = self.device.p_dict['Cstore']
+            rng = np.random.RandomState()
+            scale_RC_dist = np.sqrt(rng.exponential(scale=mean,size=self.N))
+            #scale_RC_dist = np.sqrt(rng.uniform(1.0,scale**2,size=self.N))
+            for k in range(0,self.N) :
+                A[k] = self.device.calc_A(R_ref*(1+scale_RC_dist[k]),C_ref*(1+scale_RC_dist[k]))
+            self.Adist = A
+
+                
+    def generate_Adist(self,noise=0.1,p_label='Rstore') :
+        """At the moment we do only variance in Rstore."""
+        if self.device is None :
+            print("Please first assign a device before generating Adist")
+        else :
+            A = np.zeros((self.N,3,3))
+            p_ref = self.device.p_dict[p_label] 
+            rng = np.random.RandomState()
+            Rstore_dist = rng.normal(loc=p_ref, scale=noise*p_ref,size=self.N)
+            # Clip to avoid negative values
+            Rstore_dist = np.clip(Rstore_dist, p_ref*0.01,np.inf)
+            for k in range(0,self.N) :
+                A[k] = self.device.calc_A(Rstore_dist[k])
+            self.Adist = A
+        
     def specify_Vt(self,Vts) :
         self.Vt_vec = Vts
         
     def get_dV(self, t) :     
         """ Calculate the time derivative."""
-        self.dV = self.device.A @ self.V + self.Bscale @ self.B
+        if not self.multiA :
+            self.dV = self.device.A @ self.V + self.Bscale @ self.B
+        else :
+            self.dV = np.einsum('jik,kj->ij',self.Adist,self.V) + self.Bscale @ self.B
+            
         return self.dV
         
     def update_V(self, dt) :
@@ -333,7 +382,7 @@ class OutputLayer(Layer) :
     def set_output_func(self, func_handle, func_args=None) :
         """
         Assign a continous function handle to get the input current at time t
-        For N>1 this will have to be vector valued. 
+        For N>1 this will have to be vector valued.
 
         Parameters
         ----------

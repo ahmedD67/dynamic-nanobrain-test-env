@@ -32,7 +32,7 @@ my_esn = esn.EchoStateNetwork(Nreservoir,seed=SEED)
 
 # %%
 # Specify a standard device for the hidden layers
-propagator = physics.Device('device_parameters.txt')
+propagator = physics.Device('../parameters/device_parameters.txt')
 my_esn.assign_device(propagator)
 
 
@@ -144,7 +144,7 @@ plt.show()
 
 # %%
 scl = 2.0
-tseries_test, pred_test = my_esn.predict(Tfit,2.0*Tfit)
+tseries_test, pred_test, _ = my_esn.predict(Tfit,2.0*Tfit)
 
 
 # %%

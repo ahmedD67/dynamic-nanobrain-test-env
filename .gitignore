@@ -135,6 +135,7 @@ dmypy.json
 
 # Images
 *.png
+*.svg
 
 # Movies
 *.mp4

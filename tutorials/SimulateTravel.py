@@ -22,7 +22,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Local imports
-from context import dynamicnanobrain
+#from context import dynamicnanobrain
 # core modules
 import dynamicnanobrain.core.plotter as plotter
 import dynamicnanobrain.core.physics as physics
@@ -36,45 +36,10 @@ plt.rcParams['figure.dpi'] = 200 # 200 e.g. is really fine, but slower
 
 
 # %% [markdown]
-# Method to setup the network with the desired physics. Here the storage time of the gate electrode is indirectly set by the RC constant via Rstore and Cstore. Changes to the activation functions, i.e. the transistor IVs, are made here. 
-
-# %%
-def setup_network(Rs=2e9, manipulate_shift=False, onset_shift=-0.1,
-                  cpu_shift=0.05) :
-    
-    setup_nw = stone.StoneNetwork() 
-    # Setup the internal devices
-    devices = {}
-    devices['TB1']=physics.Device('../parameters/device_parameters.txt')
-    devices['CPU4']=physics.Device('../parameters/device_parameters.txt')
-    #devices['CPU4'].set_parameter('Cstore',7e-16) # Original is 0.07 10^-15
-    devices['CPU4'].set_parameter('Rstore',Rs) # Original 2e6
-    devices['CPU4'].print_parameter('Cstore')
-    devices['CPU4'].print_parameter('Rstore')
-    print(f'Calculate tau_gate={devices["CPU4"].calc_tau_gate()} ns')
-    #setup_nw.weights['TB1->CPU4'].print_W()
-    devices['CPU1a']=physics.Device('../parameters/device_parameters.txt')
-    devices['CPU1b']=physics.Device('../parameters/device_parameters.txt')
-    devices['Pontine']=physics.Device('../parameters/device_parameters.txt')
-
-    if manipulate_shift :
-        devices["TB1"].p_dict['Vt'] = onset_shift
-        devices["CPU4"].p_dict['Vt'] = cpu_shift
-        devices["CPU1a"].p_dict['Vt'] = cpu_shift
-        devices["CPU1b"].p_dict['Vt'] = cpu_shift
-        devices["Pontine"].p_dict['Vt'] = cpu_shift
-
-    # Feed the devices into the network
-    setup_nw.assign_device(devices, unity_key='TB1')
-    
-    return setup_nw
-
-
-# %% [markdown]
 # Create network using the above method. A estimate of the storage time is given.
 
 # %%
-my_nw = setup_network()
+my_nw = trials.setup_network(memupdate=1.0)
 
 # %% [markdown]
 # #### Available layouts for network visualization:
@@ -95,7 +60,12 @@ spring_pos= my_nw.show_network(exclude_layers=['CL1','TN2'],layout='spring',k=20
 
 # %%
 # Yet another version of a drawing
-kamada_pos=my_nw.show_network(exclude_layers=['CL1','TN2','Pontine'],layout='kamada_kawai')
+#kamada_pos=my_nw.show_network(exclude_layers=['CL1','TN2','Pontine'],layout='kamada_kawai')
+kamada_pos=my_nw.show_network(exclude_layers=['CL1','TN2'],layout='kamada_kawai',weight=1.0,savefig=True)
+
+#%%
+spring_pos= my_nw.show_network(kamada_pos,exclude_layers=['CL1','TN2'],layout='spring',k=20)
+
 
 # %%
 fig, ax = my_nw.show_weights()
