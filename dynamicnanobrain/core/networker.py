@@ -156,7 +156,20 @@ class HiddenLayer(Layer) :
             for k in range(0,self.N) :
                 A[k] = self.device.calc_A(R_ref*(1+scale_RC_dist[k]),C_ref*(1+scale_RC_dist[k]))
             self.Adist = A
-
+            
+    def generate_poisson_Adist(self, mean) :
+        if self.device is None :
+            print("Please first assign a device before generating Adist")
+        else :
+            A = np.zeros((self.N,3,3))
+            R_ref = self.device.p_dict['Rstore']
+            C_ref = self.device.p_dict['Cstore']
+            rng = np.random.RandomState()
+            scale_RC_dist = np.sqrt(rng.poisson(scale=mean,size=self.N))
+            #scale_RC_dist = np.sqrt(rng.uniform(1.0,scale**2,size=self.N))
+            for k in range(0,self.N) :
+                A[k] = self.device.calc_A(R_ref*(1+scale_RC_dist[k]),C_ref*(1+scale_RC_dist[k]))
+            self.Adist = A
                 
     def generate_Adist(self,noise=0.1,p_label='Rstore') :
         """At the moment we do only variance in Rstore."""
@@ -188,9 +201,12 @@ class HiddenLayer(Layer) :
     def update_V(self, dt) :
         """ Using a fixed dt, update the voltages."""
         self.V += dt*self.dV
+        # Count voltage overshoots
+        overshoots = (self.V<-self.Vthres)*(self.V>self.Vthres)
+        N = np.sum(overshoots)
         # Voltage clipping (third try)
         self.V = np.clip(self.V,-self.Vthres,self.Vthres)
- 
+        return N
     
     def update_I(self, dt) :
         """ Using a fixed dt, update the voltages."""

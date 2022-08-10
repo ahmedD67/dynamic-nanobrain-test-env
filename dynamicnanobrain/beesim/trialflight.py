@@ -16,8 +16,8 @@ import pickle
 from scipy.interpolate import interp1d
 
 from . import pathtrials
-from . import stone
 from . import beeplotter
+from . import stone
 from ..core import physics
 from ..core import plotter
 
@@ -25,6 +25,53 @@ from ..core import plotter
 # In the current case, they become relative to BeeSimulator one folder above
 DATA_PATH='../data/beesim'
 PLOT_PATH='../plots/beesim'
+
+def compute_mean_tortuosity(cum_min_dist):
+    """Computed with tau = L / C."""
+    mu = np.nanmean(cum_min_dist, axis=1)
+    tortuosity = 1.0 / (1.0 - mu[len(mu)//2])
+    return tortuosity
+
+def compute_tortuosity(cum_min_dist):
+    """Computed with tau = L / C."""
+    L_index = len(cum_min_dist)//2
+    tortuosity = 1.0 / (1.0 - cum_min_dist[L_index])
+    return tortuosity
+
+def compute_path_straightness(INB):
+
+    # Loop over each sample
+    N = INB['x'].index[-1][0]+1 # should choose last index
+    maxlen = INB['x'].index.max()[1]+1
+    dist_from_nest = np.zeros((maxlen,N))
+    for k in range(0,N) :
+        
+        dist_from_nest[:,k] = np.sqrt((INB['x'].loc[k])**2 +
+                                      (INB['y'].loc[k])**2)
+
+    turn_dists = dist_from_nest[0]
+    # Get shortest distance so far to nest at each time step
+    # We make the y axis equal, by measuring in terms of proportion of
+    # route distance.
+    cum_min_dist = np.minimum.accumulate(dist_from_nest / turn_dists)
+
+    # Get cumulative speed
+    #cum_speed = np.cumsum(np.sqrt((V[:, T_outbound:, 0]**2 + V[:, T_outbound:, 1]**2)), axis=1)
+    cum_speed = np.zeros((maxlen,N))
+    for k in range(0,N) :
+        cum_speed[:,k] = np.cumsum(np.sqrt((INB['vx'].loc[k])**2 +
+                                           (INB['vy'].loc[k])**2))
+
+    # Now we also make the x axis equal in terms of proportion of distance
+    # Time is stretched to compensate for longer/shorter routes
+    cum_min_dist_norm = []
+    for i in np.arange(N):
+        t = cum_speed[:,i]
+        xs = np.linspace(0, turn_dists[i]*2, 500, endpoint=False)
+        cum_min_dist_norm.append(np.interp(xs,
+                                           t,
+                                           cum_min_dist[:,i]))
+    return np.array(cum_min_dist_norm).T
 
 def angular_distance(a, b):
     return (a - b + np.pi) % (2 * np.pi) - np.pi
@@ -121,8 +168,8 @@ def generate_straight_route(Tout, heading, velocity, offset=0.0) :
     return h_vec,v_vec
     
 def run_trial(trial_nw,Tout=1000,Tinb=1500,
-              inputscaling=0.9,noise=0.1, savestep=1.0, 
-              straight_route=False, fix_heading=0.0, fix_velocity=0.7, offset=0.0,
+              tn2scaling=0.9,noise=0.1, savestep=1.0,tb1scaling=0.9, 
+              straight_route=False, fix_heading=0.0, fix_velocity=0.5, offset=0.0,
               **kwargs) :
     
     if straight_route :
@@ -152,25 +199,27 @@ def run_trial(trial_nw,Tout=1000,Tinb=1500,
         return interp1d(range(Tout), tn2*scaling, axis=0)
         
     # Setup the inputs for CL1 and TN1
-    trial_nw.specify_inputs('CL1', cl1_input, inputscaling)
-    trial_nw.specify_inputs('TN2', tn2_input, inputscaling)
+    trial_nw.specify_inputs('CL1', cl1_input, tb1scaling)
+    trial_nw.specify_inputs('TN2', tn2_input, tn2scaling)
 
     # Feed the network the correct input signals for the outbound travel
-    out_res = trial_nw.evolve(T=Tout,savestep=savestep,
-                              inputscaling=inputscaling,
+    out_res, overshoots = trial_nw.evolve(T=Tout,savestep=savestep,
+                              tn2scaling=tn2scaling,
+                              tb1scaling=tb1scaling,
                               noise=noise,
                               **kwargs)
     
     # Let the network navigate the inbound journey
-    inb_res, inb_travel = trial_nw.evolve(T=Tout+Tinb,reset=False,t0=Tout,inbound=True,
+    inb_res, inb_travel, overshoots = trial_nw.evolve(T=Tout+Tinb,reset=False,t0=Tout,inbound=True,
                                        initial_heading=headings[-1],
                                        initial_pos=outbound_end_position,
                                        initial_vel=velocity[-1],
-                                       inputscaling=inputscaling,
+                                       tn2scaling=tn2scaling,
+                                       tb1scaling=tb1scaling,
                                        noise=noise,
                                        **kwargs)
 
-    return out_res, inb_res, out_travel, inb_travel
+    return out_res, inb_res, out_travel, inb_travel, overshoots
 
 def setup_network(Rs=2e11, memupdate=0.001, manipulate_shift=True, onset_shift=0.0,
                   cpu_shift=-0.2,Vt_noise=0.0,**kwargs) :
@@ -194,7 +243,7 @@ def setup_network(Rs=2e11, memupdate=0.001, manipulate_shift=True, onset_shift=0
         # Get the original Vt
         Vt0 = devices['TB1'].p_dict['Vt']
         devices["TB1"].p_dict['Vt'] = Vt0+onset_shift
-        devices["CPU4"].p_dict['Vt'] = Vt0+cpu_shift
+        #devices["CPU4"].p_dict['Vt'] = Vt0+cpu_shift
         devices["CPU1a"].p_dict['Vt'] = Vt0+cpu_shift
         devices["CPU1b"].p_dict['Vt'] = Vt0+cpu_shift
         #devices["Pontine"].p_dict['Vt'] = cpu_shift
@@ -288,6 +337,7 @@ def one_flight_results(out_res,inb_res,out_travel, inb_travel, sim_name, plot_pa
     # Create plots
     # 1. Combined trace plot
     comb_res = pd.concat([out_res,inb_res],ignore_index=True)
+    
     fig,_ = beeplotter.plot_traces(comb_res, layers=['CL1','TB1','TN2','CPU4','Pontine','CPU1'],attr='Pout',titles=True)
     # Here we need to save the figure
     plotter.save_plot(fig,'traces_'+sim_name,plot_path)
@@ -311,12 +361,17 @@ def one_flight_results(out_res,inb_res,out_travel, inb_travel, sim_name, plot_pa
         
     if show_headings:
         # Sample these datasets
-        t_sample = 5
+        t_sample = 20
         x = downsample(inb_travel['x'],inb_travel['Time'],t_sample)
         y = downsample(inb_travel['y'],inb_travel['Time'],t_sample)
-        h = downsample(inb_travel['heading'],inb_travel['Time'],t_sample)
-        ax.quiver(x,y,np.sin(h),np.cos(h),width=0.002)
-
+        hinb = downsample(inb_travel['heading'],inb_travel['Time'],t_sample)
+        ax.quiver(x,y,np.sin(hinb),np.cos(hinb),width=0.002)
+        
+        x = downsample(out_travel['x'],out_travel['Time'],t_sample)
+        y = downsample(out_travel['y'],out_travel['Time'],t_sample)
+        hout = downsample(out_travel['heading'],out_travel['Time'],t_sample)
+        ax.quiver(x,y,np.sin(hout),np.cos(hout),width=0.002)
+        
     if radius is not None :
         # Draw a circle in the homing plot
         circ = patches.Circle((inb_travel['x'][0],inb_travel['y'][0]), radius=radius, color='yellow',fill=False)
@@ -377,7 +432,7 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
             # I guess if filtered_kwargs is empty this is an empty call
             trial_nw = setup_network(**network_kwargs)
             
-            out_res, inb_res, out_travel, inb_travel = run_trial(
+            out_res, inb_res, out_travel, inb_travel, _ = run_trial( # don't save overshoots
                     trial_nw,
                     Tout=T_outbound,
                     Tinb=T_inbound,

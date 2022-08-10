@@ -248,7 +248,7 @@ def plot_memory_dist(network,plotname) :
 def run_test(df=0.01,fmin=0.1,dT=50,Tfit=300,Tpred=300,Tnoise=100,Nreservoir=100,sparsity=0.9,
              transient=10,plotname='timetrace.png',generate_plots=False,seed=None,
              spectral_radius=0.6,input_scaling=1.5,bias_scaling=0.0,
-             teacher_scaling=1.0, memory_variation=0.0) :
+             teacher_scaling=1.0, memory_variation=0.0, dist='poisson') :
     """Repeat analysis for N times to gather statistics"""
     
     # Specify device
@@ -261,7 +261,7 @@ def run_test(df=0.01,fmin=0.1,dT=50,Tfit=300,Tpred=300,Tnoise=100,Nreservoir=100
                             teacher_scaling, 
                             feedback=False)
     if memory_variation > 0.0 :
-        new_esn.randomize_memory(memory_variation)
+        new_esn.randomize_memory(memory_variation,dist)
     
     # input signal is steps, output is FM signal
     fmax = fmin+df 
@@ -307,7 +307,7 @@ def run_test(df=0.01,fmin=0.1,dT=50,Tfit=300,Tpred=300,Tnoise=100,Nreservoir=100
     
     return train_error, pred_error, signal_diff_sq, noise_var, tseries_train,pred_train,tseries_test,pred_test
     
-def run_double_test(d1=5e-2,f1min=0.1,d2=5e-3,f2min=0.01,dT1=100,dT2=200,Tfit=2000,Tpred=1000,Tnoise=1000,Nreservoir=100,sparsity=0.9,
+def run_double_test(d1=5e-2,f1min=0.1,d2=5e-3,f2min=0.01,dT1=100,dT2=100,Tfit=2000,Tpred=1000,Tnoise=1000,Nreservoir=100,sparsity=0.9,
              transient=0,plotname='double_test',generate_plots=False,seed=None,
              spectral_radius=0.6,input_scaling=0.75,bias_scaling=0.1,
              teacher_scaling=1.0, memory_variation=0.0) :
@@ -389,7 +389,7 @@ def run_double_test(d1=5e-2,f1min=0.1,d2=5e-3,f2min=0.01,dT1=100,dT2=200,Tfit=20
     signal_diffs = mean_high-mean_low            
     # Deallocate the class instance
     #del new_esn
-    return train_error, pred_error, signal_diffs, avg_var
+    return train_error, pred_error, signal_diffs, avg_var #, new_esn, tseries_train, pred_train, tseries_test, pred_test, (t1_handle, t2_handle)
 
 def generate_figurename(kwargs,suffix='') :
     filename = ''
@@ -475,12 +475,12 @@ Tfit = 1000
 Tnoise = 1000
 T=Tpred+Tfit+Tnoise
 
-f1_control, f1_output, t1series = freqeuncy_signal_generator(T,Tnoise,fmin1,fmin1+d1,50) 
-f2_control, f2_output, t2series = freqeuncy_signal_generator(T,Tnoise,fmin2,fmin2+d2,200,center_end_pulse=True) 
+f1_control, f1_output, t1series = freqeuncy_signal_generator(T,Tnoise,fmin1,fmin1+d1,100) 
+f2_control, f2_output, t2series = freqeuncy_signal_generator(T,Tnoise,fmin2,fmin2+d2,100,center_end_pulse=True) 
 
 if True :
     Nmax = 1000
-    xmax =400 #ns
+    xmax =1000 #ns
     fig, axs = plt.subplots(2,2)
 
     
@@ -522,21 +522,20 @@ plt.show()
 
 #%% Setup a network that draw memory timescales from an uniform distribution
 #%%
-T1=1000
-train_error, pred_error, signal_diffs, noise_var = run_double_test(Tfit=T1*2,Tpred=T1,Tnoise=400,
-                                                                      generate_plots=True,memory_variation=10.,
-                                                                      input_scaling=0.5)
+train_error, pred_error, signal_diffs, noise_var, my_esn, tseries_train, pred_train, tseries_test, pred_test, teacher_handles = run_double_test(Nreservoir=200,generate_plots=True,memory_variation=5.,
+                                                                           input_scaling=0.5)
 #states_train, teacher_train, my_esn = run_double_test(Tfit=T1,Tpred=T1,Tnoise=T1,generate_plots=True)
 
 #%%
 Ndf=1
 # Focus on a single df here
 #df_array = [2e-3] # GHz
-mem_var_vals = [0, 2, 4, 6, 8, 10.] # One at a time
+mem_var_vals = [0, 1, 2, 5] # One at a time
 input_scale = 0.5
+Nreservoir=200
 #param_dicts = [{'n':Ndf,'df':df_array,'memory_variation':[mem_var]*Ndf, 'fmin':[fmin]*Ndf} for mem_var in mem_var_vals]
 param_dicts = [{'n':Ndf,'memory_variation':[mem_var]*Ndf, 'input_scaling':[input_scale]*Ndf,
-                'generate_plots':[True]*Ndf} for mem_var in mem_var_vals]
+                'generate_plots':[True]*Ndf, 'Nreservoir':[Nreservoir]*Ndf} for mem_var in mem_var_vals]
 
 N=10 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
 signal_diffs = np.zeros((len(mem_var_vals),N,Ndf,2))
@@ -547,6 +546,101 @@ pred_errors = np.zeros((len(mem_var_vals),N,Ndf))
 for k, param_dict in enumerate(param_dicts):    
     signal_diffs[k], noise_vars[k], train_errors[k], pred_errors[k] = repeat_runs(N,param_dict)
     
+#%% Plot the SNR as a function of memory variation
+snr = signal_diffs/np.sqrt(noise_vars)
+
+std_vs_mem = np.std(signal_diffs,axis=1)
+mean_vs_mem = np.mean(signal_diffs,axis=1)
+
+snr_mean = np.mean(snr, axis=1)
+snr_std = np.std(snr, axis=1)
+
+fig, ax = plt.subplots()
+
+ax.errorbar(mem_var_vals[:],np.squeeze(mean_vs_mem)[:,0],np.squeeze(std_vs_mem)[:,0],fmt='o',capsize=3.0)
+ax.errorbar(mem_var_vals[:],np.squeeze(mean_vs_mem)[:,1],np.squeeze(std_vs_mem)[:,1],fmt='o',capsize=3.0)
+
+ax.set_xlabel('Mean of memory dist.')
+ax.set_ylabel('Signal (high-low)')
+#ax.set_ylim(0,12)
+#ax.set_xlim(-0.05,0.55)
+
+fig.show()
+
+fig, ax = plt.subplots()
+
+ax.errorbar(mem_var_vals[:],np.squeeze(snr_mean)[:,0],np.squeeze(snr_std)[:,0],fmt='o',capsize=3.0)
+ax.errorbar(mem_var_vals[:],np.squeeze(snr_mean)[:,1],np.squeeze(snr_std)[:,1],fmt='o',capsize=3.0)
+
+ax.set_xlabel('Mean of memory dist.')
+ax.set_ylabel('SNR (mean/std. dev.)')
+#ax.set_ylim(0,12)
+#ax.set_xlim(-0.05,0.55)
+
+fig.show()
+
+#%%            
+# Generate the target signal
+#teacher_handle = teacher_signal(my_esn.Imax*teacher_scaling)
+# Need the teacher signal as arrays in order to calculate the errors
+teacher_train = np.zeros_like(pred_train)
+teacher_test = np.zeros_like(pred_test)
+for k in [0,1] :
+    teacher_train[:,k] = teacher_handles[k](tseries_train)[:,0]
+    teacher_test[:,k] = teacher_handles[k](tseries_test)[:,0]
+
+#plt.plot(tseries_test,pred_test)
+#plt.plot(tseries_train,pred_train)
+#plt.plot(tseries_train,teacher_train,'k--')
+#plt.plot(tseries_test,teacher_test,'k--')
+
+#plt.show()
+
+fig, (ax1, ax2) = plt.subplots(2,1,sharex=True)
+k=0
+ax1.plot(tseries_train,pred_train[:,k])
+ax1.plot(tseries_train,teacher_train[:,k],'--')
+ax1.plot(tseries_test,pred_test[:,k])
+ax1.plot(tseries_test,teacher_test[:,k],'--' )
+k=1
+ax2.plot(tseries_train,pred_train[:,k])
+ax2.plot(tseries_train,teacher_train[:,k],'--')
+ax2.plot(tseries_test[:],pred_test[:,k])
+ax2.plot(tseries_test,teacher_test[:,k],'--' )
+# low part (start and end)
+
+    
+ax2.set_xlabel('Time (ns)')
+ax2.set_ylabel('Output signal (nA)')
+ax1.set_ylabel('Output signal (nA)')
+ax1.set_ylim(0,pred_test[:,0].max()+25)
+ax2.set_ylim(0,pred_test[:,1].max()+25)
+
+plt.show()
+
+train_error = np.sqrt(np.mean((pred_train - teacher_train)**2))/my_esn.Imax
+pred_error = np.sqrt(np.mean((pred_test - teacher_test)**2))/my_esn.Imax
+
+#%%plt.show()
+
+fig, (ax1, ax2) = plt.subplots(2,1,sharex=True)
+k=0
+ax1.plot(tseries_train,(pred_train[:,k]-teacher_train[:,k])**2,'--')
+ax1.plot(tseries_test,(pred_test[:,k] - teacher_test[:,k])**2,'--')
+
+k=1
+ax2.plot(tseries_train,(pred_train[:,k]-teacher_train[:,k])**2,'--')
+ax2.plot(tseries_test,(pred_test[:,k] - teacher_test[:,k])**2,'--')
+# low part (start and end)
+
+    
+ax2.set_xlabel('Time (ns)')
+ax2.set_ylabel('Output signal (nA)')
+ax1.set_ylabel('Output signal (nA)')
+ax1.set_ylim(0,((pred_test[:,0] - teacher_test[:,0])**2).max()+200)
+ax2.set_ylim(0,((pred_test[:,1] - teacher_test[:,1])**2).max()+200)
+
+plt.show()
 #%%
 def plotstatevectors(network,states,tau_min,tau_max) :
     
@@ -572,7 +666,7 @@ def plotstatevectors(network,states,tau_min,tau_max) :
     
 
 # Need a way to look at the slow/fast nodes and their state vectors
-plotstatevectors(my_esn,states,0,5)
+#plotstatevectors(my_esn,states,0,5)
 
 #%% Look at the memory constants
 A = my_esn.sample_A()

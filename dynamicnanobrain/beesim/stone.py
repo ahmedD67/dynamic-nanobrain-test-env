@@ -248,17 +248,18 @@ class StoneNetwork :
     def specify_inputs(self,key,input_handle,scaling=1.0) :
         self.layers[key].set_input_vector_func(func_handle=input_handle(scaling*self.Imax))
         
-    def updateheading(self,heading,layers,update_m=default_update_m) :
+    def updateheading(self,heading,layers,update_m=default_update_m,noise=0.0) :
         # sum left and right hand turning neurons
         r_right = sum(layers['CPU1a'].P[:7]) + layers['CPU1b'].P[1]
         r_left  = sum(layers['CPU1a'].P[7:]) + layers['CPU1b'].P[0]
-        return update_m*(r_right-r_left)*self.unity_coeff
+        r_sum = (r_right-r_left) + np.random.normal(scale=noise*self.Imax)
+        return update_m*r_sum*self.unity_coeff
         
     def evolve(self,T,reset=True,t0=0.,inbound=False,savestep=1.0,
                initial_pos=(0,0),initial_vel=(0,0),initial_heading=0,
                a=0.1, drag=0.15, hupdate=default_update_m,
-               inputscaling=0.9,noise=0.1,
-               mem_init_c=0.25,
+               tn2scaling=0.9,noise=0.1,tb1scaling=0.9,
+               mem_init_c=0.25, turn_noise=0.0,
                printtime=False) : 
                
         # Start time is t
@@ -303,7 +304,7 @@ class StoneNetwork :
                 # Add noise
                 tn2 += np.random.normal(scale=noise, size=len(tn2))
                 # scale by the standard current factor
-                return np.clip(tn2,0,1)*self.Imax*inputscaling
+                return np.clip(tn2,0,1)*self.Imax*tn2scaling
             
             # Specify the output function
             self.layers['TN2'].set_input_vector_func(tn2_activity)
@@ -339,7 +340,7 @@ class StoneNetwork :
                 output = tl2_activity(heading)
                 sig = noisy_sigmoid(-output, cl1_slope_tuned, cl1_bias_tuned, noise=noise)
                 # scale by the standard current factor
-                return sig*self.Imax*inputscaling
+                return sig*self.Imax*tb1scaling
             
             def rotate(theta, r):
                 """Return new heading after a rotation around Z axis."""
@@ -348,6 +349,8 @@ class StoneNetwork :
             # Specify the output function
             self.layers['CL1'].set_input_vector_func(cl1_activity)
         
+        # Need a dictionary with the hidden layers
+        overshoots = {'TB1':0,'CPU4':0,'CPU1a':0,'CPU1b':0,'Pontine':0}
         start = time.time()
         
         while t < T:
@@ -357,11 +360,11 @@ class StoneNetwork :
             # update with explicit Euler using dt
             # supplying the unity_coeff here to scale the weights
             # TODO: Add noise if needed
-            tm.update(dt, t, self.layers, self.weights, self.unity_coeff, t0)
+            tm.update(dt, t, self.layers, self.weights, overshoots, self.unity_coeff, t0)
             
             if inbound :
                 # update agent heading
-                motor = self.updateheading(heading,self.layers,hupdate)
+                motor = self.updateheading(heading,self.layers,hupdate,turn_noise)
                 # use a dt here since we do many turns per time unit
                 heading = rotate(heading,motor*dt)
                 # velocity using drag force and acceleration
@@ -391,6 +394,6 @@ class StoneNetwork :
         
         if inbound :
             travel = travel_log.get_timelog()
-            return result, travel
+            return result, travel, overshoots
         else :
-            return result
+            return result, overshoots

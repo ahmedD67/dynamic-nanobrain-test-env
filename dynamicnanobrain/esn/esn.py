@@ -211,6 +211,8 @@ class EchoStateNetwork :
                 self.layers[k].generate_uniform_Adist(noise)
             elif dist=='exp' :
                 self.layers[k].generate_exp_Adist(noise)
+            elif dist=='poisson' :
+                self.layers[k].generate_poisson_Adist(noise)
             else :
                 print('Unexpected dist in randomize_memory')
                 break
@@ -279,7 +281,7 @@ class EchoStateNetwork :
         
             # update with explicit Euler using dt
             # supplying the unity_coeff here to scale the weights
-            tm.update(dt, t, self.layers, self.weights, self.unity_coeff, t0, teacher_forcing)
+            tm.update(dt, t, self.layers, self.weights, unity_coeff=self.unity_coeff, t0=t0, teacher_forcing=teacher_forcing)
             
             t += dt
             # Log the progress
@@ -396,7 +398,7 @@ class EchoStateNetwork :
         pred_train = self._unscale_teacher(np.dot(states, 
                                                   W_out.T))
         
-        error = np.sqrt(np.mean((pred_train - target)**2))/self.Imax
+        error = np.sqrt(np.mean((pred_train[transient:] - target[transient:])**2))/self.Imax
         
         if not self.silent:
             print('Training error:', error)

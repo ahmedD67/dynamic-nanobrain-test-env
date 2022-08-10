@@ -13,6 +13,10 @@ nature_single = 89.0 / 25.4
 nature_double = 183.0 / 25.4
 nature_full = 247.0 / 25.4
 
+def filter_trace(trace,sigma) :
+    from scipy.ndimage import gaussian_filter1d
+    return gaussian_filter1d(trace, sigma,axis=0)
+
 def subplot_trace(target, res, layer, attr, titles) :
     # Get the relevant nodes
     columns = [name for name in res.columns if (attr in name) and (layer in name)]
@@ -20,33 +24,45 @@ def subplot_trace(target, res, layer, attr, titles) :
     # If we are plotting CPU1, we permute the one step forward
     if layer == 'CPU1' :
         columns.insert(0,columns.pop(-1))
+    if layer == 'CPUin' :
+        columns.insert(0,columns.pop(-1))
     
+    if layer == 'TN2' :
+        print('Filtering')
+        res[columns] = filter_trace(res[columns],sigma=50)
     #print(columns)
-    
-    if columns[0][3] == 'V' :
-        ylabel = 'Voltage (V)' 
-    else:
-        ylabel = 'Current (nA)'
-    
-    #TIME, INDEX = np.meshgrid(res['Time'])
-    node_idx = [x+1 for x in range(0,len(columns))]
-    # Need to copy as assigned by reference
-    node_labels = node_idx.copy()
-    if layer == 'CPU1' :
-        node_labels[0] = 'CPU1b_9'
-        node_labels[-1] = 'CPU1b_8'
+   
+    if layer=='motor' :
+        target.plot(res['Time'],res['motor-R'],label='motor-R')
+        target.plot(res['Time'],res['motor-L'],label='motor-L')
+        target.legend()
+        target.set_ylabel('Summed activity')
+    else :
+        if columns[0][3] == 'V' :
+            ylabel = 'Voltage (V)' 
+        else:
+            ylabel = 'Current (nA)'
         
-    import numpy as np
-    TIME, INDEX = np.meshgrid(res['Time'].values,node_idx)
-    # Produce a 2D plot of values over time
-    im = target.pcolormesh(TIME,INDEX,res[columns].values.transpose(),
-                           cmap='viridis', rasterized=True,
-                           shading='auto')
+        #TIME, INDEX = np.meshgrid(res['Time'])
+        node_idx = [x+1 for x in range(0,len(columns))]
+        # Need to copy as assigned by reference
+        node_labels = node_idx.copy()
+        if layer == 'CPU1' :
+            node_labels[0] = 'CPU1b_9'
+            node_labels[-1] = 'CPU1b_8'
+            
+        import numpy as np
+        TIME, INDEX = np.meshgrid(res['Time'].values,node_idx)
+        # Produce a 2D plot of values over time
+        im = target.pcolormesh(TIME,INDEX,res[columns].values.transpose(),
+                               cmap='viridis', rasterized=True,
+                               shading='auto')
     
-    plt.colorbar(im, ax=target, label=ylabel)  
-    target.set_yticks(np.array(node_idx))
-    target.set_yticklabels(node_labels)
-    target.set_ylabel('Node idx')
+        plt.colorbar(im, ax=target, label=ylabel)  
+        target.set_yticks(np.array(node_idx))
+        target.set_yticklabels(node_labels)
+        target.set_ylabel('Node idx')
+    
     target.set_xlabel('Time (ns)')
     if titles :
         target.set_title(layer)
@@ -74,10 +90,11 @@ def plot_homing_dist(cpu4, summed=None) :
                             sharex=True) 
     
     indices = range(1,9)
-    ax.plot(indices,cpu4[:8],color=mem_color_R)
-    ax.plot(indices,cpu4[8:],color=mem_color_L)
+    ax.plot(indices,cpu4[:8],color=mem_color_L,label='cpu4[:8]')
+    ax.plot(indices,cpu4[8:],color=mem_color_R,label='cpu4[8:]')
     if summed is not None :
         ax.plot(indices,summed,'k--')
+    ax.legend()
     ax.set_xticks(np.arange(1,len(indices)+1,dtype=int))
     ax.set_xticklabels(['1/16','2/9','3/10','4/11','5/12','6/13','7/14','8/15'])
     ax.set_xlabel('CPU4 neuron index')
