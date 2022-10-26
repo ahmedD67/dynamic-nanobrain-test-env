@@ -6,7 +6,7 @@ A proper description of the physical devices and the model that describes their 
 
 The main code package dynamicnanobrain contains subpackages. 
 The core package contains files like ''networker.py'', ''time_marching.py'', 
-while packages for specific applciations are available as well (like the bee simulator beesim). 
+while packages for specific applications are available as well (like the bee simulator beesim). 
 Tutorials and tests (no tests yet) are located outside the main package.
 
 For a general introduction about the use of the package and how to create networks, see the files in tutorials.
