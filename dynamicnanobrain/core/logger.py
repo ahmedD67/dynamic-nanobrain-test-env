@@ -1,105 +1,111 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jun  8 13:46:38 2021
+import torch
 
-@author: dwinge
-"""
-
-import pandas as pd
-
-class Logger :
-    
-    def __init__(self,layers,feedback=False) :
+class Logger:
+    def __init__(self, layers, feedback=False, device='cpu'):
         self.list_data = []
-        # Need to get the node names
+        self.device = device
         self.feedback = feedback
         self.column_labels = self.column_names(layers)
-        
-    def column_names(self, layers) :
-        names=['Time']
+
+    def column_names(self, layers):
+        names = ['Time']
         for idx in layers.keys():
-            node_list = layers[idx].get_names(idx)          
-            if layers[idx].layer_type == 'input' :
-                for node in node_list :
-                    names.append(node+'-Pout')
-                
-            elif layers[idx].layer_type == 'hidden' :
+            node_list = layers[idx].get_names(idx)
+            if layers[idx].layer_type == 'input':
+                for node in node_list:
+                    names.append(f"{node}-Pout")
+            elif layers[idx].layer_type == 'hidden':
                 # Voltages
-                for node in node_list :
-                    names.append(node+'-Vinh')
-                    names.append(node+'-Vexc')
-                    names.append(node+'-Vgate')
+                for node in node_list:
+                    names.append(f"{node}-Vinh")
+                    names.append(f"{node}-Vexc")
+                    names.append(f"{node}-Vgate")
                 # Input currents
-                for node in node_list :
-                    names.append(node+'-Iinh')
-                    names.append(node+'-Iexc')
+                for node in node_list:
+                    names.append(f"{node}-Iinh")
+                    names.append(f"{node}-Iexc")
                 # Output currents
-                for node in node_list :
-                    names.append(node+'-Iout')
+                for node in node_list:
+                    names.append(f"{node}-Iout")
                 # ISD (source drain) done separately to get correct ordering
-                for node in node_list :
-                    names.append(node+'-ISD')  
-                for node in node_list :
-                    names.append(node+'-Pout')
-             
-            elif layers[idx].layer_type == 'output' :
+                for node in node_list:
+                    names.append(f"{node}-ISD")
+                for node in node_list:
+                    names.append(f"{node}-Pout")
+            elif layers[idx].layer_type == 'output':
                 # Currents
-                for node in node_list :
-                    names.append(node+'-Pout')
-                if self.feedback :
-                    # add some extra columns for the signal fed back in (C)
-                    for node in node_list :
-                        names.append(node+'-Pinp')
-                    
-            else :
-                print('Unexpected layer_type in logger.column_names')
-                raise RuntimeError
+                for node in node_list:
+                    names.append(f"{node}-Pout")
+                if self.feedback:
+                    # Add some extra columns for the signal fed back in (C)
+                    for node in node_list:
+                        names.append(f"{node}-Pinp")
+            else:
+                raise RuntimeError('Unexpected layer_type in logger.column_names')
         return names
-        
-    def add_tstep(self,t,layers, unity_coeff=1.0) :
-        # Extract the data from each node in layers
+
+    def add_tstep(self, t, layers, unity_coeff=1.0):
+        """
+        Adds a timestep to the log by extracting relevant data from each layer.
+
+        Parameters
+        ----------
+        t : float
+            Current time step.
+        layers : dict
+            Dictionary of layer objects.
+        unity_coeff : float, optional
+            Scaling factor for output currents. Default is 1.0.
+        """
+        # Initialize the row with the current time
         row = [t]
+
         for idx in layers.keys():
-            # Node names
-            #name_list = layers[idx].get_names(idx)       
-            if layers[idx].layer_type == 'input' :
-                curr=layers[idx].C.flatten(order='F').tolist()
-                row += curr 
-            
-            elif layers[idx].layer_type == 'hidden' :
-                # Voltages
-                volt=layers[idx].V.flatten(order='F').tolist()
-                row +=volt
-                # Input currents
-                curr=layers[idx].B[:2].flatten(order='F').tolist()
-                row += curr 
-                # Output currents
-                # Here I add the normalization also to the recorded output
-                curr=layers[idx].I*unity_coeff
-                # Now convert to list
-                curr=curr.flatten(order='F').tolist() 
-                #curr=layers[idx].I.flatten(order='F').tolist() 
+            layer = layers[idx]
+
+            if layer.layer_type == 'input':
+                # Assuming layer.C is a 1D tensor
+                curr = layer.C.flatten().tolist()
                 row += curr
-                curr=layers[idx].ISD.flatten(order='F').tolist()
-                row += curr 
-                pout=layers[idx].P*unity_coeff
-                pout=pout.flatten(order='F').tolist()
-                row +=pout
-                
-            elif layers[idx].layer_type == 'output' :
-                # Voltages
-                curr=layers[idx].B.flatten(order='F').tolist()
-                row += curr 
-                if self.feedback :
-                    curr=layers[idx].C.flatten(order='F').tolist()
+
+            elif layer.layer_type == 'hidden':
+                # Assuming layer.V is a 2D tensor of shape (NV, N)
+                # To emulate 'F' (column-major) flattening, transpose before flattening
+                volt = layer.V.t().reshape(-1).tolist()
+                row += volt
+
+                # Assuming layer.B[:2] is a 2D tensor of shape (2, N)
+                # Transpose to emulate 'F' order flattening
+                curr = layer.B[:2].t().reshape(-1).tolist()
+                row += curr
+
+                # Assuming layer.I is a 1D tensor
+                curr = (layer.I * unity_coeff).flatten().tolist()
+                row += curr
+
+                # Assuming layer.ISD is a 1D tensor
+                curr = layer.ISD.flatten().tolist()
+                row += curr
+
+                # Assuming layer.P is a 1D tensor
+                pout = (layer.P * unity_coeff).flatten().tolist()
+                row += pout
+
+            elif layer.layer_type == 'output':
+                # Assuming layer.B is a 1D tensor
+                curr = layer.B.flatten().tolist()
+                row += curr
+
+                if self.feedback:
+                    # Assuming layer.C is a 1D tensor
+                    curr = layer.C.flatten().tolist()
                     row += curr
-            else :
-                print('Unexpected layer_type in logger.add_tstep')
-                raise RuntimeError
-                
+            else:
+                raise RuntimeError('Unexpected layer_type in logger.add_tstep')
+
+        # Append the row to the logged data
         self.list_data.append(row)
-        
-    def get_timelog(self) :
-        # Convert to pandas data frame
-        return pd.DataFrame(self.list_data, columns=self.column_labels)
+
+    def get_timelog(self):
+        # Convert to PyTorch tensor
+        return torch.tensor(self.list_data, device=self.device)
