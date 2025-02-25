@@ -5,13 +5,18 @@ from activations import *
 class NanoOptoElectronicNeuron(nn.Module):
     keys = ['Rinh','Rexc','RLED','Rstore','Cinh','Cexc','CLED','Cstore','Cgate','Vt','m','I_Vt','vt','Lg','AB','CB']
     kT = 0.02585
-    def __init__(self, N, layer_type):
+    def __init__(self, layer_type):
+        self.N = 1
         self.device = torch.zeros(len(self.keys))
         self._i = {
             k: idx
         for idx, k in enumerate(self.keys)
         }
         self.linslope = self.device[self.i['Cgate']] * self.device[self.i['vt']] *1e9
+        # TODO: Add calc_gamma, A, Bscale, B
+        # TODO: Add the params in keys to kwargs
+        # TODO: Make the calculation of B explicit? Use a linear layer? 
+        # Either way this involve adding a weight tensor to this class
 
     def calc_gammas(self, Rstore=None, Cstore=None):
         # Sum the memory and gate capacitance, convert Lg in um to cm
