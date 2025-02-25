@@ -1,15 +1,17 @@
 import torch
 from torch import nn
+from activations import *
 
-class Layer(nn.Module):
+class NanoOptoElectronicNeuron(nn.Module):
     keys = ['Rinh','Rexc','RLED','Rstore','Cinh','Cexc','CLED','Cstore','Cgate','Vt','m','I_Vt','vt','Lg','AB','CB']
     kT = 0.02585
     def __init__(self, N, layer_type):
-        self.device_params = torch.zeros(len(self.keys))
-        self._devidx = {
+        self.device = torch.zeros(len(self.keys))
+        self._i = {
             k: idx
         for idx, k in enumerate(self.keys)
         }
+        self.linslope = self.device[self.i['Cgate']] * self.device[self.i['vt']] *1e9
 
     def calc_gammas(self, Rstore=None, Cstore=None):
         # Sum the memory and gate capacitance, convert Lg in um to cm
@@ -18,33 +20,33 @@ class Layer(nn.Module):
         else :
             Cmem = self.calc_Cmem()
         # System frequencies
-        g11 = 1e-9/self.device_params[self._devidx['Cinh']]/self.device_params[self._devidx['Rinh']] # ns^-1 # GHz
-        g22 = 1e-9/self.device_params[self._devidx['Cexc']]/self.device_params[self._devidx['Rexc']] # ns^-1 # GHz
-        g13 = 1e-9/Cmem/self.device_params[self._devidx['Rinh']] # ns^-1 # GHz
-        g23 = 1e-9/Cmem/self.device_params[self._devidx['Rexc']] # ns^-1 # GHz
+        g11 = 1e-9/self.device[self._i['Cinh']]/self.device[self._i['Rinh']] # ns^-1 # GHz
+        g22 = 1e-9/self.device[self._i['Cexc']]/self.device[self._i['Rexc']] # ns^-1 # GHz
+        g13 = 1e-9/Cmem/self.device[self._i['Rinh']] # ns^-1 # GHz
+        g23 = 1e-9/Cmem/self.device[self._i['Rexc']] # ns^-1 # GHz
         if Rstore is not None :
             g33 = 1e-9/Cmem/Rstore
         else :
-            g33 = 1e-9/Cmem/self.device_params[self._devidx['Rstore']] # ns^-1 # GHz
-        gled = 1e-9/self.device_params[self._devidx['CLED']]/self.device_params[self._devidx['RLED']] # ns^-1 # GHz
+            g33 = 1e-9/Cmem/self.device[self._i['Rstore']] # ns^-1 # GHz
+        gled = 1e-9/self.device[self._i['CLED']]/self.device[self._i['RLED']] # ns^-1 # GHz
 
         return torch.tensor([g11,g22,g13,g23,g33,gled])
     
     def calc_Cmem(self,Cstore=None) :
         # Sum the memory and gate capacitance, convert Lg in um to cm
         if Cstore is None :
-            Cmem = self.device_params[self._devidx['Cstore']] + self.device_params[self._devidx['Cgate']]*self.device_params[self._devidx['Lg']]*1e-4 
+            Cmem = self.device[self._i['Cstore']] + self.device[self._i['Cgate']]*self.device[self._i['Lg']]*1e-4 
         else :
-            Cmem = Cstore + self.device_params[self._devidx['Cgate']]*self.device_params[self._devidx['Lg']]*1e-4  
+            Cmem = Cstore + self.device[self._i['Cgate']]*self.device[self._i['Lg']]*1e-4  
         return Cmem
 
     def forward(self, X):
         pass
 
-class HiddenLayer(Layer):
-    def __init__(self, N, output_channel, inhibition_channel, excitation_channel, 
+class HiddenNOENeuron(NanoOptoElectronicNeuron):
+    def __init__(self, output_channel, inhibition_channel, excitation_channel, 
                  device=None, Vthres=1.2, multiA=False, NV = 3):
-        Layer.__init__(N, layer_type='hidden')
+        super().__init__(1, layer_type='hidden')
         self.overshoots = 0
         # Set up internal variables
         self.V = torch.zeros((NV,self.N))
@@ -61,9 +63,10 @@ class HiddenLayer(Layer):
         # Device object hold A, for example
         
         self.multiA=multiA
-        self.Bscale=torch.diag([1e-18/self.device_params[self._devidx['Cinh']],
-                             1e-18/self.device_params[self._devidx['Cexc']],
+        self.Bscale=torch.diag([1e-18/self.device[self._i['Cinh']],
+                             1e-18/self.device[self._i['Cexc']],
                              0.])
+
         
     def forward(self, dt):
         self.V += dt*self.dV
@@ -74,9 +77,30 @@ class HiddenLayer(Layer):
         self.V = torch.clip(self.V,-self.Vthres,self.Vthres)
 
         self.overshoots += N
+        self.ISD = TransistorIV(
+            I_Vt = self.device[self._i["I_Vt"]],
+            kT = self.kT,
+            m = self.device[self._i["m"]],
+            mask = self.V[2] < self.device[self._i["Vt"]],
+            Vt = self.device[self._i["Vt"]],
+            linslope = self.linslope,
+            Vg = self.V[2]
+            )
 
-        self.ISD = self.transistorIV(self.V[2],self.Vt_vec)
-        self.I += dt*self.gammas[-1]*(self.ISD-self.I)
+        self.I += dt * self.gammas[-1] * (self.ISD - self.I)
         # Convert current to power through efficiency function
-        self.P = self.I*self.eta_ABC(self.I)
-    
+        self.P = self.I * eta_ABC(self.I)
+
+class InputNOENeuron(NanoOptoElectronicNeuron):
+    def __init__(self):
+        pass
+
+    def forward(self, dt):
+        pass
+
+class OutputNOENeuron(NanoOptoElectronicNeuron):
+    def __init__(self):
+        pass
+
+    def forward(self, dt):
+        pass

@@ -47,7 +47,7 @@ class Id_sat(torch.autograd.Function):
 @staticmethod
 class TransistorIV(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, I_Vt, kT, m, mask, Vt, linslope, Vg,):
+    def forward(ctx, I_Vt, kT, m, mask, Vt, linslope, Vg):
         ctx.save_for_backward(Vg, Vt)
         if t == 0:
             output = torch.where(
