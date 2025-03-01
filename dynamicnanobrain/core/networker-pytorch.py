@@ -13,7 +13,8 @@ class NanoOptoElectronicNeuron(nn.Module):
         for idx, k in enumerate(self.keys)
         }
         self.linslope = self.device[self.i['Cgate']] * self.device[self.i['vt']] *1e9
-        # TODO: Add calc_gamma, A, Bscale, B
+        self.B = nn.Linear(bias=False)
+        # TODO: Add calc_gamma, A, Bscale
         # TODO: Add the params in keys to kwargs
         # TODO: Make the calculation of B explicit? Use a linear layer? 
         # Either way this involve adding a weight tensor to this class
@@ -96,6 +97,8 @@ class HiddenNOENeuron(NanoOptoElectronicNeuron):
         # Convert current to power through efficiency function
         self.P = self.I * eta_ABC(self.I)
 
+        return self.P * unity_coeff
+
 class InputNOENeuron(NanoOptoElectronicNeuron):
     def __init__(self):
         pass
@@ -109,3 +112,11 @@ class OutputNOENeuron(NanoOptoElectronicNeuron):
 
     def forward(self, dt):
         pass
+"""
+    for t in range(T):
+        input_vt = generator(t)
+        C = self.inputNeuron(input_vt)
+        P = self.hiddenNeuron1(C)
+        P = self.hiddenNeuron2(P)
+        C_o = self.outputNeuron(P)
+"""

@@ -585,6 +585,8 @@ class InputLayer(Layer) :
         return self.C
     
     
+    
+    
 # Inherits Layer    
 class OutputLayer(Layer) :
     
